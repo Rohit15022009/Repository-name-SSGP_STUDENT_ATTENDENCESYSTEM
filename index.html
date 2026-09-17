@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Smart Attendance System with Cloud DB & Location Tracking</title>
+
+<!-- QR Code Generation & Scanner Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;color:#172033;}
+.timetable-wrap{overflow-x:auto;border:1px solid #cbd5e1;border-radius:12px;background:#fff;}
+.timetable-table{width:100%;border-collapse:collapse;min-width:850px;}
+.timetable-table th,.timetable-table td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;vertical-align:middle;}
+.timetable-table th{background:#eff6ff;color:#1e3a8a;}
+.timetable-table input,.timetable-table select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;}
+.auto-live{padding:12px;border-radius:10px;background:#ecfdf5;color:#166534;font-weight:bold;}
+.auto-closed{padding:12px;border-radius:10px;background:#f8fafc;color:#475569;}
+
+/* HEADER */
+header{height:65px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:white;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100;}
+.menu-btn{background:none;border:none;color:white;font-size:28px;width:45px;cursor:pointer;}
+.logo{font-size:20px;font-weight:bold;margin-left:10px;}
+.user-info{margin-left:auto;font-size:14px;}
+
+/* SIDEBAR */
+.sidebar{position:fixed;top:65px;left:-270px;width:270px;height:calc(100vh - 65px);background:white;box-shadow:4px 0 20px rgba(0,0,0,.15);transition:.3s;z-index:99;padding:15px;overflow-y:auto;}
+.sidebar.active{left:0;}
+.sidebar button{width:100%;padding:13px;margin:5px 0;border:none;border-radius:10px;background:#f1f5f9;text-align:left;cursor:pointer;font-size:15px;}
+.sidebar button:hover{background:#dbeafe;color:#1d4ed8;}
+.logout{background:#fee2e2!important;color:#b91c1c;}
+
+/* MAIN CONTAINER */
+.container{max-width:1250px;margin:auto;padding:20px;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* CARDS */
+.card{background:white;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 4px 18px rgba(15,23,42,.08);}
+.card h2{margin-bottom:15px;}
+.card h3{margin-bottom:10px;}
+
+/* LOGIN */
+.login-box{max-width:450px;margin:70px auto;}
+.login-box h1{text-align:center;margin-bottom:10px;}
+.login-box p{text-align:center;color:#64748b;margin-bottom:20px;}
+
+/* INPUT & BUTTONS */
+input,select,textarea{width:100%;padding:12px;margin:6px 0;border:1px solid #cbd5e1;border-radius:9px;font-size:14px;}
+button{padding:12px 15px;border:none;border-radius:9px;cursor:pointer;font-weight:bold;}
+.primary{background:#2563eb;color:white;}
+.success{background:#16a34a;color:white;}
+.danger{background:#dc2626;color:white;}
+.warning{background:#f59e0b;color:white;}
+.secondary{background:#64748b;color:white;}
+
+/* GRID & STATS */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:15px;}
+.stat{font-size:30px;font-weight:bold;color:#2563eb;}
+.stat-card{border-left:5px solid #2563eb;}
+
+/* TABLES */
+.table-container{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;min-width:850px;}
+th,td{padding:12px;border-bottom:1px solid #e2e8f0;text-align:left;}
+th{background:#f8fafc;}
+
+/* BADGES */
+.badge{display:inline-block;padding:5px 10px;border-radius:20px;font-size:12px;font-weight:bold;}
+.present{background:#dcfce7;color:#166534;}
+.absent{background:#fee2e2;color:#991b1b;}
+
+/* CODE */
+.attendance-code{text-align:center;font-size:42px;letter-spacing:8px;font-weight:bold;background:#eff6ff;color:#1d4ed8;padding:25px;border-radius:15px;margin:15px 0;}
+.hidden{display:none!important;}
+.message{padding:10px;border-radius:8px;margin:10px 0;}
+
+/* REAL-TIME STUDENT SESSION ALERT POPUP */
+.session-popup {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: #1e3a8a;
+    color: white;
+    padding: 16px 22px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    z-index: 500;
+    animation: slideIn 0.3s ease-out;
+    max-width: 350px;
+}
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+#reader { width: 100%; max-width: 400px; margin: 15px auto; border-radius: 12px; overflow: hidden; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 300; }
+.modal-box { background: white; width: 500px; max-width: 95%; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+</style>
+</head>
+
+<body>
+
+<!-- LIVE SESSION NOTIFICATION POPUP FOR STUDENTS -->
+<div id="liveSessionPopup" class="session-popup hidden">
+  <h4 style="margin-bottom:5px;">🚀 Active Attendance Session!</h4>
+  <p id="popupText" style="font-size:13px; margin-bottom:10px;"></p>
+  <button class="success" style="width:100%; padding:8px; font-size:12px;" onclick="jumpToAttendance()">Mark Attendance Now</button>
+</div>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage">
+<div class="card login-box">
+<h1>🎓 Smart Attendance</h1>
+<p>College Attendance Management System with Cloud Sync & Geo-Fence</p>
+
+<input id="loginUsername" placeholder="Username">
+<input id="loginPassword" type="password" placeholder="Password">
+
+<button class="primary" style="width:100%" onclick="login()">Login</button>
+<br><br>
+<button class="secondary" style="width:100%" onclick="showRegister()">Student Create Account</button>
+
+
+<div id="loginMessage" class="message hidden"></div>
+</div>
+</div>
+
+<!-- APPLICATION INTERFACE -->
+<div id="app" class="hidden">
+<header>
+<button class="menu-btn" onclick="toggleMenu()">☰</button>
+<div class="logo">🎓 Smart Attendance Cloud</div>
+<div class="user-info" id="headerUser"></div><button id="notificationBell" class="secondary" style="margin-left:10px;padding:7px 10px;position:relative;" onclick="showPage('notes')">🔔 <span id="notificationCount">0</span></button>
+</header>
+
+<!-- SIDEBAR -->
+<div id="sidebar" class="sidebar">
+<button onclick="showPage('dashboard')">🏠 Home</button>
+<button onclick="showPage('attendance')">🎯 Attendance</button>
+<button onclick="showPage('history')" id="historyMenu">📊 Attendance History</button>
+<button type="button" onclick="showPage('students')" id="studentsMenu">👨‍🎓 Student Management</button>
+<button type="button" onclick="showPage('facultyTab')" id="facultyMenu">👥 Faculty Management</button>
+<button type="button" onclick="showPage('academics')" id="academicsMenu">🏫 Academics</button>
+<button type="button" onclick="showPage('notes')">📚 Notes</button>
+<button type="button" onclick="showPage('passwordManagement')" id="passwordMenu">🔐 Password Management</button>
+<button type="button" onclick="showPage('installApp')">📲 Install App</button>
+<button type="button" onclick="showPage('systemTab')" id="systemMenu">⚙️ System & Database</button>
+<button class="logout" onclick="logout()">🚪 Logout</button>
+</div>
+
+<div class="container">
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="page active">
+<div class="card">
+<h2>Home Dashboard</h2>
+<p id="welcomeText"></p>
+</div>
+
+<div class="grid admin-faculty-only" id="adminFacultyStats">
+<div class="card stat-card"><h3>Total Students</h3><div class="stat" id="totalStudents">0</div></div>
+<div class="card stat-card"><h3>Total Present Today</h3><div class="stat" id="totalPresent">0</div></div>
+<div class="card stat-card"><h3>Total Absent Today</h3><div class="stat" id="totalAbsent">0</div></div>
+<div class="card stat-card"><h3>Overall Attendance</h3><div class="stat" id="overallPercentage">0%</div></div>
+</div>
+
+<div class="card" id="studentPercentageCard">
+<h2>📈 My Attendance Profile</h2>
+<div id="studentProfile" class="student-profile"></div>
+<div id="myAttendance"></div>
+</div>
+</div>
+
+<!-- ATTENDANCE -->
+<div id="attendance" class="page">
+<div class="card" id="facultyAttendance">
+<h2>🎯 Attendance Session Control</h2>
+<div class="grid">
+<select id="sessionDepartment"><option value="">Select Department</option></select>
+<select id="sessionSemester"><option value="">Select Semester</option></select>
+<select id="sessionSubject"><option value="">Select Subject</option></select>
+<select id="sessionBatch"><option value="All">All Students</option><option value="B1">B1</option><option value="B2">B2</option><option value="B3">B3</option><option value="B4">B4</option></select>
+<select id="sessionType"><option value="regular">Regular Lecture</option><option value="lab">Individual Lab</option></select>
+</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+<button class="primary" onclick="generateCode()">🎯 Start Attendance</button>
+<button class="danger" onclick="endAttendanceSession()">🛑 End Attendance</button>
+</div>
+<div class="message" style="margin-top:12px;background:#eff6ff;color:#1e3a8a;">
+  <b>⚙️ Automatic Timetable Mode</b><br>
+  The system can start and end attendance automatically according to the timetable.
+  Admin/Faculty can customize every lecture's start and end time below.
+</div>
+<div class="grid" style="margin-top:10px;">
+  <label>Auto Mode
+    <select id="autoModeSelect">
+      <option value="on">🟢 ON — Automatic Start & End</option>
+      <option value="off">🔴 OFF — Manual Control</option>
+    </select>
+  </label>
+  <label>Timetable Department
+    <select id="timetableDepartment"></select>
+  </label>
+  <label>Timetable Semester
+    <select id="timetableSemester">
+      <option value="3">Semester 3</option>
+    </select>
+  </label>
+</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+  <button class="secondary" onclick="saveAutoSettings()">💾 Save Auto Settings</button>
+  <button class="secondary" onclick="resetTimetableToDefault()">↺ Restore Default Timetable</button>
+</div>
+<div id="autoSessionInfo" style="margin-top:10px;"></div>
+<div id="timetableEditor" style="margin-top:15px;"></div>
+<div id="sessionStatus" style="margin-top:15px;text-align:center;font-weight:bold;"></div>
+<div id="codeArea"></div>
+</div>
+
+<div class="card" id="studentAttendance">
+<h2>📝 Mark Attendance (Auto GPS Geofence Verification)</h2>
+<p id="studentAttendanceContext" style="margin-bottom:10px;color:#64748b"></p>
+<div id="studentLiveStatus" class="message" style="margin-bottom:12px;text-align:center;">⏳ Checking for live attendance sessions...</div>
+<div id="studentActiveSessions" style="display:grid;gap:10px;margin-bottom:12px;"></div>
+<div id="studentAttendanceControls">
+<select id="studentSubject"></select>
+<input id="attendanceCode" placeholder="Enter 6 digit code or scan QR camera">
+
+<div style="margin-top:15px; text-align:center;">
+<button class="secondary" type="button" onclick="startScanner()">📷 Open QR Scanner Camera</button>
+<div id="reader" style="display:none;"></div>
+<button id="closeScannerBtn" class="danger hidden" type="button" style="margin-top:10px;" onclick="stopScanner()">Close Camera</button>
+</div>
+
+<button class="success" style="width:100%; margin-top:15px;" onclick="markPresent()">
+Submit Attendance (Auto-Verify GPS & Code)
+</button>
+</div>
+</div>
+
+<div class="card admin-faculty-only" id="locationAlertsCard">
+<h2>🚨 Attendance Location Alerts</h2>
+<p style="color:#64748b;font-size:13px;margin-bottom:12px;">Staff can see students who attempted attendance while outside the 50-meter classroom boundary.</p>
+<div class="table-container">
+<table>
+<thead><tr><th>Student</th><th>Subject</th><th>Distance</th><th>GPS Location</th><th>Time</th><th>Action</th></tr></thead>
+<tbody id="locationAlertsTable"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<!-- HISTORY -->
+<div id="history" class="page">
+<div class="card">
+<h2>📊 Attendance History & Student GPS Tracker</h2>
+<p style="color:#64748b; font-size:13px; margin-bottom:15px;">Staff can inspect exact submission locations using the GPS track tool.</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>Student</th>
+<th>Enrollment</th>
+<th>Subject</th>
+<th>Date</th>
+<th>GPS Dist.</th>
+<th>Status</th>
+<th>Location Map</th>
+</tr>
+</thead>
+<tbody id="historyTable"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<!-- STUDENT MANAGEMENT TAB -->
+<div id="students" class="page">
+<div class="card">
+<h2>👨‍🎓 Add New Student</h2>
+<div class="grid">
+<input id="newStudentName" placeholder="Student Name">
+<input id="newStudentEnroll" placeholder="Enrollment Number">
+<input id="newStudentEmail" type="email" placeholder="Student Email">
+<input id="newStudentPhone" type="tel" placeholder="Mobile Number (+91...)" inputmode="tel">
+<select id="newStudentDept"></select>
+<select id="newStudentSem"></select>
+<select id="newStudentBatch"><option value="">Select Batch</option><option value="B1">Batch B1</option><option value="B2">Batch B2</option><option value="B3">Batch B3</option><option value="B4">Batch B4</option></select>
+<input id="newStudentUsername" placeholder="Username">
+<input id="newStudentPassword" placeholder="Password">
+</div>
+<button class="primary" style="margin-top:10px;" onclick="addStudent()">Save Student to Cloud DB</button>
+</div>
+
+<div class="card" id="pendingStudentsCard">
+<h2>🕐 Student Account Approval Requests</h2>
+<p style="color:#64748b;font-size:14px;">Admin or Faculty can review new student requests. The student account is created only after approval.</p>
+<div class="table-container">
+<table>
+<thead><tr><th>Name</th><th>Enrollment</th><th>Email</th><th>Department</th><th>Semester</th><th>Batch</th><th>Username</th><th>Action</th></tr></thead>
+<tbody id="pendingStudentsTable"></tbody>
+</table>
+</div>
+</div>
+
+<div class="card">
+<h2>Registered Students Database</h2>
+<div class="table-container">
+<table>
+<thead>
+<tr><th>Name</th><th>Enrollment</th><th>Email</th><th>Department</th><th>Semester</th><th>Batch</th><th>Username</th><th>Action</th></tr>
+</thead>
+<tbody id="studentTable"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<!-- FACULTY MANAGEMENT TAB -->
+<div id="facultyTab" class="page">
+<div class="card">
+<h2>👥 Faculty Management (Admin Only)</h2>
+<div class="grid">
+<input id="facultyName" placeholder="Faculty Name">
+<input id="facultyId" placeholder="Faculty ID">
+<input id="facultyUsername" placeholder="Faculty Username">
+<input id="facultyEmail" type="email" placeholder="Faculty Email">
+<input id="facultyPhone" type="tel" placeholder="Mobile Number (+91...)" inputmode="tel">
+<input id="facultyPassword" type="password" placeholder="Faculty Password">
+<select id="facultyDepartment"><option value="">Select Department</option></select>
+<select id="facultySemester"><option value="">Select Semester</option></select>
+</div>
+<button class="primary" style="margin-top:10px;" onclick="addFaculty()">Create Faculty Account</button>
+</div>
+</div>
+
+<!-- PASSWORD MANAGEMENT -->
+<div id="passwordManagement" class="page">
+<div class="card">
+<h2>🔐 Password Management</h2>
+<p style="color:#64748b;font-size:14px;margin-bottom:15px;">Set a new password without displaying the user's existing password.</p>
+<div id="passwordPermissionNote" class="message" style="background:#eff6ff;color:#1e3a8a;margin-bottom:15px;"></div>
+<div class="table-container">
+<table>
+<thead><tr><th>Name</th><th>Role</th><th>Username</th><th>ID / Enrollment</th><th>Department</th><th>Action</th></tr></thead>
+<tbody id="passwordManagementTable"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<!-- INSTALL APP / PWA -->
+<div id="installApp" class="page">
+<div class="card">
+<h2>📲 Install Smart Attendance App</h2>
+<p style="color:#64748b;font-size:14px;">Install this website like an app on Android, iPhone/iPad, or desktop. The existing Smart Attendance interface is retained.</p>
+<div class="grid" style="margin-top:15px;">
+<div class="card" style="border:1px solid #e2e8f0;box-shadow:none;">
+<h3>🤖 Android / Chrome</h3>
+<p id="androidInstallText" style="color:#64748b;margin:8px 0 12px;">Use the Install App button when your browser offers it.</p>
+<button class="primary" id="installPwaBtn" onclick="installPWA()">📲 Install App</button>
+</div>
+<div class="card" style="border:1px solid #e2e8f0;box-shadow:none;">
+<h3>🍎 iPhone / iPad</h3>
+<p style="color:#64748b;line-height:1.5;">Open this website in Safari → tap <b>Share</b> → <b>Add to Home Screen</b> → Add.</p>
+</div>
+<div class="card" style="border:1px solid #e2e8f0;box-shadow:none;">
+<h3>💻 Desktop</h3>
+<p style="color:#64748b;line-height:1.5;">In a supported browser, use the install icon in the address bar or choose the browser's <b>Install</b> option.</p>
+</div>
+</div>
+<div class="card" style="border:1px solid #e2e8f0;box-shadow:none;margin-top:15px;">
+<h3>🔳 Scan / Share App Link</h3>
+<div id="pwaQr" style="width:220px;height:220px;margin:15px auto;display:flex;align-items:center;justify-content:center;"></div>
+<p id="pwaAppUrl" style="font-size:12px;word-break:break-all;text-align:center;color:#64748b;"></p>
+<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px;">
+<button class="secondary" onclick="copyAppLink()">🔗 Copy Link</button>
+<button class="primary" onclick="shareAppLink()">↗️ Share App</button>
+</div>
+</div>
+<div id="pwaStatus" class="message" style="text-align:center;background:#ecfdf5;color:#166534;">🟢 Online</div>
+<div id="standaloneStatus" class="message" style="text-align:center;background:#f8fafc;color:#475569;">🌐 Browser mode</div>
+</div>
+</div>
+
+<!-- ACADEMICS -->
+<div id="academics" class="page">
+<div class="card">
+<h2>🏫 Academic Structure Management</h2>
+<div class="grid">
+  <div>
+    <h3>Add Department</h3>
+    <input id="departmentName" placeholder="Department Name">
+    <button class="primary" style="margin-top:8px;" onclick="addDepartment()">Add Department</button>
+  </div>
+  <div>
+    <h3>Add Subject</h3>
+    <select id="subjectDepartment"><option value="">Select Department</option></select>
+    <select id="academicSemester"><option value="">Select Semester</option></select>
+    <input id="subjectName" placeholder="Subject Name">
+    <button class="primary" style="margin-top:8px;" onclick="addAcademic()">Add Subject</button>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- NOTES -->
+<div id="notes" class="page">
+<div class="card" id="noteComposerCard">
+<h2>📚 Study Notes, PDFs & Announcements</h2>
+<p style="color:#64748b;font-size:14px;">Admin and Faculty only. Publish notes for everyone or a specific department/semester. Students can view and download attachments but cannot publish. Any file type can be selected. There is no application-level file-size limit; Firebase Storage service limits and project quota still apply.</p>
+<div class="grid">
+<input id="noteTitle" placeholder="Title">
+<select id="noteAudienceType"><option value="all">Everyone</option><option value="specific">Specific Department & Semester</option></select>
+<select id="noteDepartment"><option value="">Select Department</option></select>
+<select id="noteSemester"><option value="">Select Semester</option><option value="1">Semester 1</option><option value="2">Semester 2</option><option value="3">Semester 3</option><option value="4">Semester 4</option><option value="5">Semester 5</option><option value="6">Semester 6</option><option value="7">Semester 7</option><option value="8">Semester 8</option></select>
+</div>
+<textarea id="noteText" rows="4" placeholder="Announcement / note details..."></textarea>
+<label style="display:block;margin-top:10px;font-weight:700;">📎 Attach PDF, image or document (optional)</label>
+<input id="noteFiles" type="file" multiple  style="margin-top:6px;">
+<div id="noteUploadStatus" style="margin-top:8px;color:#2563eb;font-size:13px;font-weight:600;"></div>
+<button id="publishNoteBtn" class="primary" type="button" style="margin-top:10px;cursor:pointer;">📤 Publish Note</button>
+</div>
+<div class="card"><h2>📢 Available Notes & Announcements</h2><div id="notesList"></div></div>
+</div>
+
+<!-- SYSTEM & DATABASE RESET TAB -->
+<div id="systemTab" class="page">
+<div class="card" style="border-left: 5px solid #dc2626;">
+<h2>⚙️ System & Cloud Database Management</h2>
+<p style="color:#64748b; font-size:14px; margin-bottom:15px;">
+Authorized admin or faculty staff can securely reset or clear cloud storage database collections when required.
+</p>
+<button class="danger" onclick="verifyAndResetCloudDB()">Reset / Clear Cloud Database</button>
+</div>
+<div class="card" style="border-left:5px solid #2563eb;">
+<h2>📱 Device Access Management</h2>
+<p style="color:#64748b;font-size:14px;margin-bottom:12px;">One browser/device is locked to one account. Admin and Developer can release a device when a student or staff member changes device.</p>
+<div class="table-container"><table>
+<thead><tr><th>User</th><th>Role</th><th>Device ID</th><th>Last Seen</th><th>Action</th></tr></thead>
+<tbody id="deviceLocksTable"></tbody>
+</table></div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<!-- LOCATION TRACKER MODAL -->
+<div id="trackerModal" class="modal-overlay hidden">
+<div class="modal-box">
+<h3 id="trackerTitle">📍 Student Location Tracker</h3>
+<p id="trackerDetails" style="margin:10px 0; font-size:14px; color:#475569;"></p>
+<div style="margin-top:15px; border-radius:10px; overflow:hidden; border:1px solid #cbd5e1;">
+  <iframe id="mapFrame" width="100%" height="280" style="border:0;" allowfullscreen="" loading="lazy"></iframe>
+</div>
+<button class="secondary" style="width:100%; margin-top:15px;" onclick="closeTrackerModal()">Close Tracker</button>
+</div>
+</div>
+
+<!-- STUDENT REGISTRATION MODAL -->
+<div id="registerModal" class="hidden" style="position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:200;">
+<div class="card" style="width:450px;max-width:95%">
+<h2>Student Registration</h2>
+<input id="regName" placeholder="Full Name">
+<input id="regEnroll" placeholder="Enrollment Number">
+<input id="regEmail" type="email" placeholder="Email Address">
+<input id="regPhone" type="tel" placeholder="Mobile Number (+91...)" inputmode="tel">
+<input id="regUsername" placeholder="Username">
+<input id="regPassword" type="password" placeholder="Password">
+<select id="regDept"></select>
+<select id="regSem"></select>
+<select id="regBatch"><option value="">Select Batch</option><option value="B1">Batch B1</option><option value="B2">Batch B2</option><option value="B3">Batch B3</option><option value="B4">Batch B4</option></select>
+<button class="primary" style="width:100%; margin-top:10px;" onclick="registerStudent()">Submit Registration for Approval</button>
+<br><br>
+<button class="secondary" style="width:100%" onclick="closeRegister()">Cancel</button>
+</div>
+</div>
+
+<!-- FIREBASE SDKs (COMPAT: works with direct file:// opening) -->
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA6v1VyvY-FPEW50gfRWY6VA5RIDKqqvuM",
+    authDomain: "smart-attendance-system1-58089.firebaseapp.com",
+    projectId: "smart-attendance-system1-58089",
+    storageBucket: "smart-attendance-system1-58089.firebasestorage.app",
+    messagingSenderId: "611391422838",
+    appId: "1:611391422838:web:8d9f67ad0179cc037fba57",
+    measurementId: "G-8CGMXNK0P8"
+  };
+
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+
+    const dbCloud = firebase.firestore();
+    const storageCloud = firebase.storage();
+    const firebaseAuth = firebase.auth();
+
+    // The app uses its own Firestore username/password login. Firebase Storage
+    // still needs a Firebase Auth identity, so sign in anonymously for storage
+    // access. This does NOT replace the app login.
+    window.firebaseAuthReady = Promise.resolve(firebaseAuth.currentUser);
+    window.ensureFirebaseAuth = async function(){
+      if(firebaseAuth.currentUser) return firebaseAuth.currentUser;
+      const cred=await firebaseAuth.signInAnonymously();
+      return cred.user;
+    };
+
+    window.firebaseAuth = firebaseAuth;
+    // Keep the names expected by the rest of this application.
+    window.dbCloud = dbCloud;
+    window.storageCloud = storageCloud;
+    window.storageRef = (storage, path) => storage.ref(path);
+    window.uploadBytesRef = async (storageRef, file) => storageRef.put(file);
+    window.getDownloadURLRef = async (uploadTaskOrRef) => {
+      const ref = uploadTaskOrRef.ref ? uploadTaskOrRef.ref : uploadTaskOrRef;
+      return await ref.getDownloadURL();
+    };
+    window.colRef = (db, path) => db.collection(path);
+    window.addDocRef = (collectionRef, data) => collectionRef.add(data);
+    window.docRef = (db, path, id) => id === undefined ? db.doc(path) : db.collection(path).doc(id);
+    window.getDocRef = (docRef) => docRef.get();
+    window.setDocRef = (docRef, data, options) => options ? docRef.set(data, options) : docRef.set(data);
+    window.deleteDocRef = (docRef) => docRef.delete();
+    window.onSnapshotRef = (ref, callback) => ref.onSnapshot(callback);
+    window.getDocsRef = (ref) => ref.get();
+    window.updateDocRef = (docRef, data) => docRef.update(data);
+    window.writeBatchRef = (db) => db.batch();
+
+    // The rest of the application expects this constructor to accept
+    // (auth, containerId, options). Adapt compat Auth to that shape.
+    window.RecaptchaVerifier = function(auth, container, options){
+      return new firebase.auth.RecaptchaVerifier(container, options || {});
+    };
+    window.signInWithPhoneNumber = (auth, phoneNumber, appVerifier) =>
+      auth.signInWithPhoneNumber(phoneNumber, appVerifier);
+
+    window.firebaseReady = true;
+    window.firebaseInitError = null;
+    if (typeof initCloudSync === 'function') initCloudSync();
+  } catch (error) {
+    console.error('Firebase initialization failed:', error);
+    window.firebaseReady = false;
+    window.firebaseInitError = error && error.message ? error.message : String(error);
+  }
+</script>
+
+<script>
+// Classroom GPS Coordinates & boundary radius
+const CLASSROOM_LAT = 21.161131;
+const CLASSROOM_LNG = 72.862439;
+const MAX_ALLOWED_DISTANCE_METERS = 50;
+
+let currentUser = null;
+let html5QrCodeScanner = null;
+let cachedUsers = [];
+let usersLoaded = false;
+let usersLoadPromise = null;
+let cachedDepartments = [];
+let cachedAttendance = [];
+let cachedAttendanceAttempts = [];
+let cachedNotes = [];
+let studentLiveLocationKey = "";
+let studentLiveLocationAllowed = false;
+let cachedPendingStudents = [];
+let cachedPasswordResetRequests = [];
+let knownNoteIds = new Set();
+let notesInitialLoad = true;
+let activeSession = null;
+let activeSessions = [];
+let selectedStudentSessionId = null;
+let cachedDeviceLocks = [];
+let persistentSessionRestored = false;
+
+const DEFAULT_TIMETABLE = [
+  {day:"Monday", period:1, start:"10:30", end:"11:30", subject:"Database Management", code:"DBM", batch:"All"},
+  {day:"Monday", period:2, start:"11:30", end:"12:30", subject:"Cryptography & Web Security", code:"CWS", batch:"All"},
+  {day:"Monday", period:3, start:"13:00", end:"14:00", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Monday", period:4, start:"14:00", end:"15:00", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Monday", period:5, start:"15:10", end:"16:10", subject:"Object Oriented Programming with JAVA", code:"OOPJ", batch:"All"},
+  {day:"Monday", period:6, start:"16:10", end:"17:10", subject:"Data Structures with Python", code:"DSP", batch:"All"},
+  {day:"Tuesday", period:1, start:"10:30", end:"11:30", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Tuesday", period:2, start:"11:30", end:"12:30", subject:"Data Structures with Python", code:"DSP", batch:"All"},
+  {day:"Tuesday", period:3, start:"13:00", end:"14:00", subject:"Data Structures with Python", code:"DSP", batch:"All"},
+  {day:"Tuesday", period:4, start:"14:00", end:"15:00", subject:"Database Management", code:"DBM", batch:"All"},
+  {day:"Tuesday", period:5, start:"15:10", end:"16:10", subject:"Cryptography & Web Security", code:"CWS", batch:"All"},
+  {day:"Wednesday", period:1, start:"10:30", end:"11:30", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Wednesday", period:2, start:"11:30", end:"12:30", subject:"Database Management", code:"DBM", batch:"All"},
+  {day:"Wednesday", period:3, start:"13:00", end:"14:00", subject:"Object Oriented Programming with JAVA", code:"OOPJ", batch:"All"},
+  {day:"Wednesday", period:4, start:"14:00", end:"15:00", subject:"Digital Marketing", code:"DM", batch:"All"},
+  {day:"Wednesday", period:5, start:"15:10", end:"16:10", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Thursday", period:1, start:"10:30", end:"11:30", subject:"Object Oriented Programming with JAVA", code:"OOPJ", batch:"All"},
+  {day:"Thursday", period:2, start:"11:30", end:"12:30", subject:"Data Structures with Python", code:"DSP", batch:"All"},
+  {day:"Thursday", period:3, start:"13:00", end:"14:00", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Thursday", period:4, start:"14:00", end:"15:00", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Thursday", period:5, start:"15:10", end:"16:10", subject:"Operating Systems", code:"OS", batch:"All"},
+  {day:"Friday", period:1, start:"10:30", end:"11:30", subject:"Digital Marketing", code:"DM", batch:"All"},
+  {day:"Friday", period:2, start:"11:30", end:"12:30", subject:"Database Management", code:"DBM", batch:"All"},
+  {day:"Friday", period:3, start:"13:00", end:"14:00", subject:"Operating Systems", code:"OS", batch:"All"},
+  {day:"Friday", period:4, start:"14:00", end:"15:00", subject:"Cryptography & Web Security", code:"CWS", batch:"All"},
+  {day:"Friday", period:5, start:"15:10", end:"16:10", subject:"LAB", code:"LAB", batch:"B1/B2/B3/B4"},
+  {day:"Saturday", period:1, start:"10:30", end:"11:30", subject:"", code:"", batch:"All"},
+  {day:"Saturday", period:2, start:"11:30", end:"12:30", subject:"", code:"", batch:"All"},
+  {day:"Saturday", period:3, start:"13:00", end:"14:00", subject:"", code:"", batch:"All"},
+  {day:"Saturday", period:4, start:"14:00", end:"15:00", subject:"", code:"", batch:"All"},
+  {day:"Saturday", period:5, start:"15:10", end:"16:10", subject:"", code:"", batch:"All"}
+];
+// Optional individual-lab mappings. Admin/Faculty can also start any lab batch manually.
+const LAB_SESSION_OPTIONS = {
+  "Monday-3":[{batch:"B1",subject:"Cryptography & Web Security"},{batch:"B2",subject:"Cryptography & Web Security"},{batch:"B3",subject:"Operating Systems"},{batch:"B4",subject:"Operating Systems"}],
+  "Tuesday-1":[{batch:"B1",subject:"Object Oriented Programming with JAVA"},{batch:"B2",subject:"Object Oriented Programming with JAVA"},{batch:"B3",subject:"Data Structures with Python"},{batch:"B4",subject:"Data Structures with Python"}],
+  "Wednesday-5":[{batch:"B1",subject:"Digital Marketing"},{batch:"B2",subject:"Digital Marketing"},{batch:"B3",subject:"Cryptography & Web Security"},{batch:"B4",subject:"Cryptography & Web Security"}],
+  "Thursday-3":[{batch:"B1",subject:"Data Structures with Python"},{batch:"B2",subject:"Data Structures with Python"},{batch:"B3",subject:"Object Oriented Programming with JAVA"},{batch:"B4",subject:"Object Oriented Programming with JAVA"}],
+  "Friday-5":[{batch:"B1",subject:"Database Management"},{batch:"B2",subject:"Database Management"},{batch:"B3",subject:"Digital Marketing"},{batch:"B4",subject:"Digital Marketing"}]
+};
+DEFAULT_TIMETABLE.forEach(slot=>{ const key=`${slot.day}-${slot.period}`; if(slot.subject==="LAB" && LAB_SESSION_OPTIONS[key]) slot.labOptions=LAB_SESSION_OPTIONS[key]; });
+window.savedTimetableConfig = null;
+window.autoSchedulerTimer = null;
+window.lastAutoSlotKey = null;
+window.autoSchedulerBusy = false;
+
+function applyTimetableConfig(data){
+  if(!data) return;
+  if(document.getElementById("autoModeSelect")) document.getElementById("autoModeSelect").value=data.autoMode||"on";
+  if(document.getElementById("timetableSemester")) document.getElementById("timetableSemester").value=String(data.semester||"3");
+  if(document.getElementById("timetableDepartment")) {
+    const match=(cachedDepartments||[]).find(d=>d.name===data.departmentName || /information technology|\bit\b/i.test(d.name||""));
+    if(match) document.getElementById("timetableDepartment").value=match.firebaseId;
+  }
+}
+
+function getTimetableConfig(){
+  return window.savedTimetableConfig || {autoMode:"on",departmentName:"Information Technology",semester:"3",slots:DEFAULT_TIMETABLE};
+}
+
+function timetableDepartmentName(){
+  const id=document.getElementById("timetableDepartment")?.value;
+  const d=getDepartmentObj(id);
+  return d?.name || getTimetableConfig().departmentName || "Information Technology";
+}
+
+function renderTimetableEditor(){
+  const box=document.getElementById("timetableEditor");
+  if(!box || !currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")) return;
+  const cfg=getTimetableConfig();
+  const slots=Array.isArray(cfg.slots)?cfg.slots:DEFAULT_TIMETABLE;
+  const subjects=((getDepartmentObj(document.getElementById("timetableDepartment")?.value)||{}).semesters||{})[String(cfg.semester||"3")]||[];
+  const options=[...new Set(["", "LAB", ...subjects, "Database Management", "Cryptography & Web Security", "Data Structures with Python", "Digital Marketing", "Object Oriented Programming with JAVA", "Operating Systems"])];
+  box.innerHTML=`<div class="timetable-wrap"><table class="timetable-table"><thead><tr><th>Day</th><th>Period</th><th>Start</th><th>End</th><th>Subject</th><th>Code</th><th>Batch</th></tr></thead><tbody>`+
+    slots.map((x,i)=>`<tr><td><input data-ti="${i}" data-field="day" value="${escapeHtml(x.day||"")}"></td><td>${x.period||i+1}</td><td><input type="time" data-ti="${i}" data-field="start" value="${x.start||"10:30"}"></td><td><input type="time" data-ti="${i}" data-field="end" value="${x.end||"11:30"}"></td><td><select data-ti="${i}" data-field="subject">${options.map(o=>`<option value="${escapeHtml(o)}" ${o===(x.subject||"")?"selected":""}>${escapeHtml(o||"— Free —")}</option>`).join("")}</select></td><td><input data-ti="${i}" data-field="code" value="${escapeHtml(x.code||"")}" placeholder="DBM"></td><td><input data-ti="${i}" data-field="batch" value="${escapeHtml(x.batch||"All")}"></td></tr>`).join("")+
+    `</tbody></table></div><p style="margin-top:8px;color:#64748b;font-size:13px;">You can change start/end times, subjects, codes and batches. For LAB, each B1/B2/B3/B4 can have its own session. These settings are saved in Firebase for future logins.</p>`;
+}
+
+function escapeHtml(v){return String(v??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));}
+
+async function saveAutoSettings(){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Only Admin or Faculty can change automatic attendance settings."); return; }
+  const slots=(getTimetableConfig().slots||DEFAULT_TIMETABLE).map((x,i)=>{
+    const get=f=>document.querySelector(`[data-ti="${i}"][data-field="${f}"]`)?.value;
+    return {...x,day:get("day")||x.day,start:get("start")||x.start,end:get("end")||x.end,subject:get("subject")??x.subject,code:get("code")??x.code,batch:get("batch")||"All"};
+  });
+  const cfg={autoMode:document.getElementById("autoModeSelect")?.value||"on",departmentName:timetableDepartmentName(),departmentId:document.getElementById("timetableDepartment")?.value||"",semester:document.getElementById("timetableSemester")?.value||"3",slots,updatedAt:Date.now(),updatedBy:currentUser.name};
+  try{
+    await window.setDocRef(window.docRef(window.dbCloud,"system","timetableConfig"),cfg);
+    window.savedTimetableConfig=cfg;
+    alert("Automatic attendance settings saved successfully.");
+    runAutomaticAttendanceCheck();
+  }catch(e){console.error(e);alert("Unable to save timetable settings.");}
+}
+
+async function resetTimetableToDefault(){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Only Admin or Faculty can reset the timetable."); return; }
+  if(!confirm("Restore the default Semester 3 timetable? Your customized times will be replaced.")) return;
+  const cfg={autoMode:"on",departmentName:timetableDepartmentName(),departmentId:document.getElementById("timetableDepartment")?.value||"",semester:"3",slots:DEFAULT_TIMETABLE,updatedAt:Date.now(),updatedBy:currentUser.name};
+  try{await window.setDocRef(window.docRef(window.dbCloud,"system","timetableConfig"),cfg);window.savedTimetableConfig=cfg;renderTimetableEditor();alert("Default timetable restored.");}catch(e){console.error(e);alert("Unable to restore timetable.");}
+}
+
+function timeToMinutes(t){const [h,m]=String(t||"").split(":").map(Number);return Number.isFinite(h)&&Number.isFinite(m)?h*60+m:null;}
+function getCurrentTimetableSlot(){
+  const cfg=getTimetableConfig();
+  if(cfg.autoMode!=="on") return null;
+  const days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const now=new Date(); const day=days[now.getDay()]; const mins=now.getHours()*60+now.getMinutes();
+  return (cfg.slots||[]).find(s=>s.day===day && s.subject && timeToMinutes(s.start)<=mins && mins<timeToMinutes(s.end)) || null;
+}
+
+function findSubjectValue(slot){
+  if(!slot) return "";
+  const d=getDepartmentObj(getTimetableConfig().departmentId)||cachedDepartments.find(x=>x.name===getTimetableConfig().departmentName || /information technology|\bit\b/i.test(x.name||""));
+  const subs=Array.isArray(d?.semesters?.[String(getTimetableConfig().semester||"3")])?d.semesters[String(getTimetableConfig().semester||"3")]:[];
+  return subs.find(x=>x===slot.subject) || subs.find(x=>String(x).toLowerCase().includes(String(slot.code||"").toLowerCase())) || slot.subject;
+}
+
+async function runAutomaticAttendanceCheck(){
+  if(window.autoSchedulerBusy) return;
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")) return;
+  const cfg=getTimetableConfig(); if(cfg.autoMode!=="on") return;
+  const slot=getCurrentTimetableSlot(); if(!slot) return;
+  const slotKey=`${slot.day}-${slot.period}-${slot.start}-${slot.end}-${slot.subject}`;
+  if(window.lastAutoSlotKey===slotKey) return;
+  const deptId=cfg.departmentId || (cachedDepartments.find(d=>d.name===cfg.departmentName || /information technology|it/i.test(d.name||""))?.firebaseId || "");
+  const subject=findSubjectValue(slot); if(!deptId || !subject)return;
+  window.autoSchedulerBusy=true;
+  try{
+    const labKey=`${slot.day}-${slot.period}`; const options=Array.isArray(slot.labOptions)&&slot.labOptions.length ? slot.labOptions : (subject==="LAB" && LAB_SESSION_OPTIONS[labKey] ? LAB_SESSION_OPTIONS[labKey] : [{batch:slot.batch||"All",subject:subject}]);
+    for(const opt of options){
+      const code=Math.floor(100000+Math.random()*900000).toString();
+      const start=new Date(); const end=new Date(); const [eh,em]=slot.end.split(":").map(Number); end.setHours(eh,em,0,0);
+      const data={code,department:deptId,semester:String(cfg.semester||"3"),subject:opt.subject||subject,batch:opt.batch||"All",sessionType:(subject==="LAB"?"lab":"regular"),individualLab:subject==="LAB",active:true,startTime:Date.now(),endTime:end.getTime(),startedBy:currentUser.name,startedByRole:currentUser.role,automatic:true,autoSlotKey:slotKey,timetablePeriod:slot.period};
+      await window.addDocRef(window.colRef(window.dbCloud,"activeSessions"),data);
+    }
+    window.lastAutoSlotKey=slotKey;
+    alert(`Automatic attendance started for ${options.length} session${options.length>1?"s":""}.`);
+  }catch(e){console.error(e);}finally{window.autoSchedulerBusy=false;}
+}
+
+async function autoEndExpiredSessions(){
+  const now=Date.now();
+  const expired=activeSessions.filter(s=>s.active && s.endTime && now>=Number(s.endTime));
+  for(const s of expired){
+    try{
+      if(s.legacy) await window.updateDocRef(window.docRef(window.dbCloud,"system","activeSession"),{active:false,endTime:now,endedBy:"Automatic Timetable",endedByRole:"system"});
+      else await window.updateDocRef(window.docRef(window.dbCloud,"activeSessions",s.firebaseId),{active:false,endTime:now,endedBy:"Automatic Timetable",endedByRole:"system"});
+    }catch(e){console.error(e);}
+  }
+}
+
+function startAutomaticScheduler(){
+  if(window.autoSchedulerTimer) clearInterval(window.autoSchedulerTimer);
+  window.autoSchedulerTimer=setInterval(()=>{runAutomaticAttendanceCheck();autoEndExpiredSessions();},10000);
+  runAutomaticAttendanceCheck();
+}
+
+function initCloudSync() {
+  if(!window.dbCloud) { setTimeout(initCloudSync, 100); return; }
+
+  // Sync Users
+  usersLoadPromise = new Promise(resolve => {
+    window.onSnapshotRef(window.colRef(window.dbCloud, "users"), snapshot => {
+      cachedUsers = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+      if(cachedUsers.length === 0 && window.setDocRef) {
+        window.setDocRef(window.docRef(window.dbCloud, "users", "default-admin"), {
+          id: 1, role: "admin", name: "Administrator", username: "admin", password: "admin123", enroll: "ADMIN", status: "approved"
+        }, {merge:true}).catch(e => console.error("Default admin creation failed:", e));
+      }
+      usersLoaded = true;
+      resolve(cachedUsers);
+      refreshAll();
+    }, error => {
+      console.error("Users sync failed:", error);
+      usersLoaded = false;
+      resolve([]);
+    });
+  });
+
+  // Sync pending student registration requests
+  window.onSnapshotRef(window.colRef(window.dbCloud, "pendingStudents"), snapshot => {
+    cachedPendingStudents = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+    renderPendingStudents();
+  });
+
+  // Sync Departments
+  window.onSnapshotRef(window.colRef(window.dbCloud, "departments"), snapshot => {
+    cachedDepartments = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+    loadDropdowns();
+  });
+
+  // Sync Attendance
+  window.onSnapshotRef(window.colRef(window.dbCloud, "attendance"), snapshot => {
+    cachedAttendance = snapshot.docs.map(doc => doc.data());
+    refreshAll();
+  });
+
+  // Sync multiple active attendance sessions (one per batch/lab when needed)
+  window.onSnapshotRef(window.colRef(window.dbCloud, "activeSessions"), snapshot => {
+    activeSessions = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }))
+      .filter(s => s.active)
+      .sort((a,b)=>(a.startTime||0)-(b.startTime||0));
+    activeSession = activeSessions[0] || null;
+    if(currentUser?.role==="student") { studentLiveLocationKey=""; studentLiveLocationAllowed=false; }
+    handleSessionAlertTrigger();
+    refreshAll();
+  });
+
+  // Backward compatibility with the old single-session document
+  window.onSnapshotRef(window.docRef(window.dbCloud, "system", "activeSession"), docSnap => {
+    if(docSnap.exists() && docSnap.data().active){
+      const legacy={...docSnap.data(),firebaseId:"legacy-activeSession",legacy:true};
+      if(!activeSessions.some(x=>x.firebaseId===legacy.firebaseId)) activeSessions=[legacy,...activeSessions];
+      activeSession=activeSessions[0]||legacy;
+      handleSessionAlertTrigger();
+      refreshAll();
+    }
+  });
+
+  // Sync one-user-per-device locks
+  window.onSnapshotRef(window.colRef(window.dbCloud, "deviceLocks"), snapshot => {
+    cachedDeviceLocks = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+    renderDeviceLocks();
+    if(currentUser) validateCurrentDeviceLock().catch(e => console.warn("Device lock validation:", e));
+  }, error => console.error("Device lock sync failed:", error));
+
+  // Sync Timetable & Auto Settings
+  window.onSnapshotRef(window.docRef(window.dbCloud, "system", "timetableConfig"), docSnap => {
+    if(docSnap.exists()) {
+      const data=docSnap.data();
+      window.savedTimetableConfig=data;
+      applyTimetableConfig(data);
+    } else {
+      window.savedTimetableConfig=null;
+      applyTimetableConfig({autoMode:"on",departmentName:"Information Technology",semester:"3",slots:DEFAULT_TIMETABLE});
+    }
+    renderTimetableEditor();
+    refreshAll();
+  });
+
+  // Sync outside-boundary attendance attempts for Admin/Faculty
+  window.onSnapshotRef(window.colRef(window.dbCloud, "attendanceAttempts"), snapshot => {
+    cachedAttendanceAttempts = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }))
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderLocationAlerts();
+  });
+
+  // Sync Notes / announcements in real time
+  window.onSnapshotRef(window.colRef(window.dbCloud, "notes"), snapshot => {
+    const next = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+    const previousIds = knownNoteIds;
+    cachedNotes = next;
+    knownNoteIds = new Set(next.map(n => n.firebaseId));
+    renderNotes();
+    updateNotificationCount();
+    if(!notesInitialLoad && currentUser){
+      const newNotes = next.filter(n => !previousIds.has(n.firebaseId) && noteVisibleToUser(n));
+      newNotes.forEach(showNoteNotification);
+    }
+    notesInitialLoad = false;
+  });
+}
+
+/* =========================
+LOGIN SYSTEM
+========================= */
+function getDeviceId(){
+  let id=localStorage.getItem("smartAttendanceDeviceId");
+  if(!id){
+    id=(crypto && crypto.randomUUID) ? crypto.randomUUID() : "dev-"+Date.now()+"-"+Math.random().toString(36).slice(2);
+    localStorage.setItem("smartAttendanceDeviceId",id);
+  }
+  return id;
+}
+
+function savePersistentSession(user){
+  localStorage.setItem("smartAttendanceSession",JSON.stringify({
+    userId:user.firebaseId,
+    username:user.username||"",
+    deviceId:getDeviceId(),
+    loginAt:Date.now()
+  }));
+}
+
+function clearPersistentSession(){ localStorage.removeItem("smartAttendanceSession"); }
+
+async function claimDeviceForUser(user, allowExisting=true){
+  const deviceId=getDeviceId();
+  const ref=window.docRef(window.dbCloud,"deviceLocks",deviceId);
+  if(window.dbCloud.runTransaction){
+    const result=await window.dbCloud.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(snap.exists){
+        const data=snap.data()||{};
+        if(String(data.userId)!==String(user.firebaseId)) return {ok:false,data};
+        tx.update(ref,{lastSeenAt:Date.now(),username:user.username||data.username||"",name:user.name||data.name||"",role:user.role||data.role||""});
+        return {ok:true,data};
+      }
+      tx.set(ref,{userId:user.firebaseId,username:user.username||"",name:user.name||"",role:user.role||"",claimedAt:Date.now(),lastSeenAt:Date.now()});
+      return {ok:true,data:null};
+    });
+    return result;
+  }
+  const snap=await window.getDocRef(ref);
+  if(snap.exists && String(snap.data().userId)!==String(user.firebaseId)) return {ok:false,data:snap.data()};
+  await window.setDocRef(ref,{userId:user.firebaseId,username:user.username||"",name:user.name||"",role:user.role||"",claimedAt:snap.exists?snap.data().claimedAt:Date.now(),lastSeenAt:Date.now()},{merge:true});
+  return {ok:true,data:snap.exists?snap.data():null};
+}
+
+async function validateCurrentDeviceLock(){
+  if(!currentUser || !window.dbCloud) return false;
+  const deviceId=getDeviceId();
+  try{
+    const snap=await window.getDocRef(window.docRef(window.dbCloud,"deviceLocks",deviceId));
+    if(!snap.exists || String(snap.data().userId)!==String(currentUser.firebaseId)){
+      currentUser=null; clearPersistentSession();
+      document.getElementById("app")?.classList.add("hidden");
+      document.getElementById("loginPage")?.classList.remove("hidden");
+      showLoginErrorGlobal("This device is no longer assigned to the current account. Please log in again.");
+      return false;
+    }
+    return true;
+  }catch(e){ console.warn("Device lock read failed",e); return true; }
+}
+
+function showLoginErrorGlobal(text){
+  const box=document.getElementById("loginMessage");
+  if(box){ box.textContent=text; box.className="message danger"; box.classList.remove("hidden"); }
+}
+
+async function restorePersistentSession(){
+  if(persistentSessionRestored || !window.dbCloud) return;
+  persistentSessionRestored=true;
+  const raw=localStorage.getItem("smartAttendanceSession");
+  if(!raw) return;
+  let session;
+  try{ session=JSON.parse(raw); }catch(e){ clearPersistentSession(); return; }
+  if(!session?.userId || session.deviceId!==getDeviceId()) { clearPersistentSession(); return; }
+  try{
+    const snap=await window.getDocRef(window.docRef(window.dbCloud,"users",session.userId));
+    if(!snap.exists){ clearPersistentSession(); return; }
+    const user={...snap.data(),firebaseId:snap.id};
+    if(user.status && user.status!=="approved" && user.role!=="admin" && user.role!=="faculty"){ clearPersistentSession(); return; }
+    const lock=await claimDeviceForUser(user,true);
+    if(!lock.ok){ clearPersistentSession(); showLoginErrorGlobal("This device is assigned to another account."); return; }
+    currentUser=user;
+    document.getElementById("loginPage")?.classList.add("hidden");
+    document.getElementById("app")?.classList.remove("hidden");
+    document.getElementById("headerUser").textContent=user.name+" ("+String(user.role||"").toUpperCase()+")";
+    setupInterface();
+    showPage("dashboard");
+  }catch(e){ console.warn("Persistent session restore failed",e); }
+}
+
+async function login(){
+  const username=document.getElementById("loginUsername").value.trim();
+  const password=document.getElementById("loginPassword").value;
+  const msgBox=document.getElementById("loginMessage");
+  const showLoginError=(text)=>{msgBox.textContent=text;msgBox.className="message danger";msgBox.classList.remove("hidden");};
+  if(!username||!password){showLoginError("Please enter both username and password.");return;}
+  msgBox.textContent="Connecting to Firebase...";msgBox.className="message";msgBox.classList.remove("hidden");
+  const started=Date.now();
+  while(!window.firebaseReady&&!window.firebaseInitError&&Date.now()-started<8000) await new Promise(r=>setTimeout(r,100));
+  if(window.firebaseInitError){showLoginError("Firebase initialization failed: "+window.firebaseInitError);return;}
+  if(!window.dbCloud||!window.colRef||!window.getDocsRef){showLoginError("Firebase is not ready. Please refresh the page and try again.");return;}
+  msgBox.textContent="Checking account...";
+  let users=[];
+  try{
+    const snapshot=await window.getDocsRef(window.colRef(window.dbCloud,"users"));
+    users=snapshot.docs.map(d=>({...d.data(),firebaseId:d.id})); cachedUsers=users; usersLoaded=true;
+  }catch(error){console.error(error);showLoginError("Unable to connect to Firebase. Check your internet connection and Firestore Security Rules.");return;}
+  if(users.length===0&&username.toLowerCase()==="admin"&&password==="admin123"){
+    try{
+      const adminData={id:1,role:"admin",name:"Administrator",username:"admin",password:"admin123",enroll:"ADMIN",status:"approved"};
+      await window.setDocRef(window.docRef(window.dbCloud,"users","default-admin"),adminData,{merge:true});
+      users=[{...adminData,firebaseId:"default-admin"}];cachedUsers=users;
+    }catch(error){showLoginError("Firebase is connected, but the users collection cannot be written. Check Firestore Security Rules.");return;}
+  }
+  const user=users.find(u=>String(u.username||"").trim().toLowerCase()===username.toLowerCase()&&String(u.password||"")===password);
+  if(!user){showLoginError(users.length===0?"No user accounts exist in Firebase. Create an account or allow the default Admin setup.":"Invalid username or password. Check the account stored in Firebase.");return;}
+  if(user.status&&user.status!=="approved"&&user.role!=="admin"&&user.role!=="faculty"){showLoginError("This account is not approved yet.");return;}
+  msgBox.textContent="Checking device access...";
+  try{
+    const lock=await claimDeviceForUser(user);
+    if(!lock.ok){
+      const owner=lock.data||{};
+      showLoginError("This device is already assigned to another account ("+(owner.username||"registered user")+"). Ask an Admin or Developer to release this device before using another account.");
+      return;
+    }
+  }catch(e){console.error("DEVICE LOCK ERROR",e);showLoginError("Could not verify device access. Check Firestore Rules for the deviceLocks collection.");return;}
+  currentUser=user;savePersistentSession(user);
+  msgBox.classList.add("hidden");document.getElementById("loginPage").classList.add("hidden");document.getElementById("app").classList.remove("hidden");
+  document.getElementById("headerUser").textContent=user.name+" ("+String(user.role||"").toUpperCase()+")";setupInterface();showPage("dashboard");
+}
+
+function setupInterface(){
+  const student=currentUser.role==="student";
+  document.getElementById("studentsMenu")?.classList.toggle("hidden",student);
+  document.getElementById("facultyMenu")?.classList.toggle("hidden", student || currentUser.role!=="admin");
+  document.getElementById("passwordMenu")?.classList.toggle("hidden", student);
+  document.getElementById("academicsMenu")?.classList.toggle("hidden",student);
+  document.getElementById("systemMenu")?.classList.toggle("hidden",student);
+  document.getElementById("historyMenu")?.classList.toggle("hidden",student);
+  document.getElementById("noteComposerCard")?.classList.toggle("hidden",student);
+  renderPendingStudents();
+  renderPasswordManagement();
+  renderNotes();
+  document.getElementById("systemMenu")?.classList.toggle("hidden",student);
+  document.getElementById("studentAttendance")?.classList.toggle("hidden",!student);
+  document.getElementById("facultyAttendance")?.classList.toggle("hidden",student);
+  document.querySelectorAll(".admin-faculty-only").forEach(el=>el.classList.toggle("hidden",student));
+  loadDropdowns();
+  if(currentUser?.role==="student") {
+    studentLiveLocationKey="";
+    studentLiveLocationAllowed=false;
+    handleSessionAlertTrigger();
+  }
+  refreshAll();
+}
+
+function toggleMenu(){ document.getElementById("sidebar").classList.toggle("active"); }
+
+function showPage(id){
+  try {
+    // Attendance History & GPS Tracker is restricted to Admin/Faculty.
+    if(id === "facultyTab" && currentUser && currentUser.role !== "admin"){ alert("Faculty Management is available only to Admin."); return false; }
+    if(id === "passwordManagement" && currentUser && !["admin","developer","faculty"].includes(currentUser.role)){ alert("Password Management is available only to Admin, Developer, and Faculty."); return false; }
+    if(id === "history" && currentUser && currentUser.role === "student"){
+      alert("Attendance History & GPS Tracker is available only to Admin and Faculty.");
+      return false;
+    }
+    const pages=document.querySelectorAll(".page");
+    pages.forEach(p=>p.classList.remove("active"));
+
+    const target=document.getElementById(id);
+    if(!target){
+      console.error("Page not found:", id);
+      alert("This section is not available: " + id);
+      return false;
+    }
+
+    target.classList.add("active");
+
+    const sidebar=document.getElementById("sidebar");
+    if(sidebar) sidebar.classList.remove("active");
+
+    // Rendering data must never prevent the selected section from opening.
+    try {
+      if(typeof refreshAll === "function") refreshAll();
+    } catch(renderError) {
+      console.error("Section refresh error:", renderError);
+    }
+
+    window.scrollTo({top:0, behavior:"smooth"});
+    return true;
+  } catch(error){
+    console.error("Navigation error:", error);
+    return false;
+  }
+}
+
+function logout(){
+  currentUser=null;
+  stopScanner();
+  clearPersistentSession();
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("loginPage").classList.remove("hidden");
+  const msg=document.getElementById("loginMessage"); if(msg){msg.classList.add("hidden");msg.textContent="";}
+}
+
+function showRegister(){ document.getElementById("registerModal").classList.remove("hidden"); loadRegistrationDropdowns(); }
+function closeRegister(){ document.getElementById("registerModal").classList.add("hidden"); }
+
+async function registerStudent(){
+  let name=document.getElementById("regName").value.trim();
+  let enroll=document.getElementById("regEnroll").value.trim();
+  let email=document.getElementById("regEmail").value.trim().toLowerCase();
+  let phone=document.getElementById("regPhone").value.trim();
+  let username=document.getElementById("regUsername").value.trim();
+  let password=document.getElementById("regPassword").value;
+  let dept=document.getElementById("regDept").value;
+  let sem=document.getElementById("regSem").value;
+  let batch=document.getElementById("regBatch").value;
+
+  if(!name||!enroll||!email||!phone||!username||!password||!dept||!sem||!batch){ alert("Please fill all details."); return; }
+  if(cachedUsers.some(u=>u.username===username || u.enroll===enroll || normalizePhone(u.phone)===normalizePhone(phone))){ alert("Username or enrollment already exists."); return; }
+  if(cachedPendingStudents.some(u=>u.username===username || u.enroll===enroll || normalizePhone(u.phone)===normalizePhone(phone))){ alert("A registration request with this username or enrollment is already pending."); return; }
+
+  try{
+    await window.addDocRef(window.colRef(window.dbCloud, "pendingStudents"), { id:Date.now(), role:"student", name, username, password, email, phone, enroll, department:dept, semester:sem, batch, status:"pending", requestedAt:Date.now() });
+    alert("Registration request submitted. Your Student ID will be created only after Admin or Faculty approval.");
+    closeRegister();
+  }catch(e){ console.error(e); alert("Unable to submit registration request."); }
+}
+
+function renderPendingStudents(){
+  const body=document.getElementById("pendingStudentsTable");
+  const card=document.getElementById("pendingStudentsCard");
+  if(!body) return;
+  const staff=currentUser && (currentUser.role==="admin" || currentUser.role==="faculty");
+  if(card) card.classList.toggle("hidden", !staff);
+  if(!staff) return;
+  body.innerHTML=cachedPendingStudents.map(p=>`
+    <tr>
+      <td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.enroll)}</td><td>${escapeHtml(p.email||"-")}</td>
+      <td>${escapeHtml(getDepartment(p.department))}</td><td>${escapeHtml(p.semester)}</td><td>${escapeHtml(p.batch||"-")}</td><td>${escapeHtml(p.username)}</td>
+      <td><button class="primary" style="padding:5px 10px;font-size:12px;" onclick="approveStudent('${p.firebaseId}')">✅ Approve</button> <button class="danger" style="padding:5px 10px;font-size:12px;" onclick="rejectStudent('${p.firebaseId}')">❌ Reject</button></td>
+    </tr>`).join("") || '<tr><td colspan="8">No pending student registration requests.</td></tr>';
+}
+
+async function approveStudent(firebaseId){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Only Admin or Faculty can approve students."); return; }
+  const p=cachedPendingStudents.find(x=>x.firebaseId===firebaseId);
+  if(!p) return;
+  if(cachedUsers.some(u=>u.username===p.username || u.enroll===p.enroll || normalizePhone(u.phone)===normalizePhone(p.phone) || String(u.email||"").toLowerCase()===String(p.email||"").toLowerCase())){ alert("A student with this username, enrollment, mobile number, or email already exists."); return; }
+  if(!confirm(`Approve ${p.name} and create the student account?`)) return;
+  try{
+    await window.addDocRef(window.colRef(window.dbCloud,"users"), {...p, role:"student", approvedBy:currentUser.name, approvedByRole:currentUser.role, approvedAt:Date.now(), status:"approved"});
+    await window.deleteDocRef(window.docRef(window.dbCloud,"pendingStudents",firebaseId));
+    alert("Student approved. The Student ID/account has been created.");
+  }catch(e){console.error(e);alert("Unable to approve student.");}
+}
+
+async function rejectStudent(firebaseId){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Only Admin or Faculty can reject students."); return; }
+  const p=cachedPendingStudents.find(x=>x.firebaseId===firebaseId);
+  if(!p || !confirm(`Reject registration request from ${p.name}?`)) return;
+  try{ await window.deleteDocRef(window.docRef(window.dbCloud,"pendingStudents",firebaseId)); alert("Registration request rejected."); }catch(e){console.error(e);alert("Unable to reject request.");}
+}
+
+function normalizePhone(phone){
+  let p=String(phone||"").replace(/[^0-9+]/g,"");
+  if(p.startsWith("0")) p="+91"+p.slice(1);
+  if(p && !p.startsWith("+")) p="+91"+p;
+  return p;
+}
+
+
+
+
+/* =========================
+REAL-TIME SESSION & AUTO-JUMP
+========================= */
+async function generateCode(){
+  if(!currentUser || (currentUser.role !== "admin" && currentUser.role !== "faculty")){
+    alert("Only Admin or Faculty can start an attendance session."); return;
+  }
+  const dept=document.getElementById("sessionDepartment").value;
+  const sem=document.getElementById("sessionSemester").value;
+  const sub=document.getElementById("sessionSubject").value;
+  const batch=document.getElementById("sessionBatch")?.value || "All";
+  const type=document.getElementById("sessionType")?.value || "regular";
+  if(!dept||!sem||!sub){ alert("Please select Department, Semester, and Subject."); return; }
+  const code=Math.floor(100000 + Math.random() * 900000).toString();
+  const sessionData={code,department:dept,semester:sem,subject:sub,batch,sessionType:type,individualLab:type==="lab",active:true,startTime:Date.now(),startedBy:currentUser.name,startedByRole:currentUser.role,automatic:false};
+  try{
+    const ref=await window.addDocRef(window.colRef(window.dbCloud,"activeSessions"),sessionData);
+    activeSessions=[{...sessionData,firebaseId:ref.id},...activeSessions]; activeSession=activeSessions[0];
+    renderActiveSessionCode(code);
+    alert(`Attendance session started!
+
+${sub}${type==="lab"?" • "+batch:""}
+Code: ${code}`);
+    refreshAll();
+  }catch(error){console.error(error);alert("Unable to start attendance session.");}
+}
+
+async function endAttendanceSession(sessionId){
+  if(!currentUser || (currentUser.role !== "admin" && currentUser.role !== "faculty")){ alert("Only Admin or Faculty can end an attendance session."); return; }
+  const target=activeSessions.find(s=>s.firebaseId===sessionId) || activeSession;
+  if(!target || !target.active){ alert("There is no active attendance session."); return; }
+  if(!confirm(`End attendance for ${target.subject}${target.batch&&target.batch!=="All"?" • "+target.batch:""}?`)) return;
+  try{
+    if(target.legacy){ await window.updateDocRef(window.docRef(window.dbCloud,"system","activeSession"),{active:false,endTime:Date.now(),endedBy:currentUser.name,endedByRole:currentUser.role}); }
+    else await window.updateDocRef(window.docRef(window.dbCloud,"activeSessions",target.firebaseId),{active:false,endTime:Date.now(),endedBy:currentUser.name,endedByRole:currentUser.role});
+    refreshAll();
+  }catch(e){console.error(e);alert("Unable to end attendance session.");}
+}
+
+function renderActiveSessionCode(code){
+  const area=document.getElementById("codeArea"); if(!area)return;
+  area.innerHTML=`<div class="attendance-code">${escapeHtml(code)}</div><p style="text-align:center;font-weight:bold;color:#1e3a8a;">Scan QR code or enter code above:</p><div id="qrcode" style="display:flex;justify-content:center;margin-top:15px;"></div>`;
+  const q=document.getElementById("qrcode"); if(q){q.innerHTML=""; new QRCode(q,{text:code,width:160,height:160});}
+}
+
+function renderActiveSessionCodeList(){
+  const area=document.getElementById("codeArea"); if(!area)return;
+  if(!activeSessions.length){ area.innerHTML=""; return; }
+  area.innerHTML=activeSessions.map(s=>`<div class="card" style="margin-top:10px;border:1px solid #cbd5e1;"><b>🟢 ${escapeHtml(s.subject)}</b> ${s.batch&&s.batch!=="All"?"• "+escapeHtml(s.batch):"• All Students"}<br><small>${escapeHtml(s.code)} • ${escapeHtml(s.startedBy||"")}</small><br><button class="danger" style="margin-top:8px;padding:6px 10px;" onclick="endAttendanceSession('${escapeJs(s.firebaseId)}')">🛑 End This Session</button></div>`).join("");
+}
+
+function handleSessionAlertTrigger(){
+  if(!currentUser || currentUser.role!=="student") return;
+  const sessions=activeSessions.filter(sessionMatchesStudent);
+  const list=document.getElementById("studentActiveSessions");
+  const status=document.getElementById("studentLiveStatus");
+  const controls=document.getElementById("studentAttendanceControls");
+  if(!sessions.length){
+    if(list) list.innerHTML="";
+    if(status){status.className="message";status.textContent="⚪ No live attendance session available for your class/batch.";}
+    if(controls) controls.style.display="none";
+    return;
+  }
+  if(list) list.innerHTML=sessions.map(s=>`<button class="secondary" style="text-align:left;padding:12px;" onclick="selectStudentSession('${escapeJs(s.firebaseId)}')">🟢 <b>${escapeHtml(s.subject)}</b> • ${escapeHtml(s.batch||"All")}<br><small>${s.individualLab?"Individual Lab":"Regular Lecture"} • Tap to verify your location</small></button>`).join("");
+  const target=sessions.find(s=>s.firebaseId===selectedStudentSessionId)||sessions[0];
+  selectStudentSession(target.firebaseId);
+}
+
+function selectStudentSession(sessionId){
+  const s=activeSessions.find(x=>x.firebaseId===sessionId && sessionMatchesStudent(x));
+  if(!s) return;
+  selectedStudentSessionId=sessionId;
+  activeSession=s;
+  studentLiveLocationAllowed=false;
+  const status=document.getElementById("studentLiveStatus");
+  const controls=document.getElementById("studentAttendanceControls");
+  if(status){status.className="message";status.style.background="#eff6ff";status.style.color="#1e3a8a";status.textContent=`📍 Checking location for ${s.subject}${s.batch&&s.batch!=="All"?" • "+s.batch:""}...`;}
+  if(controls) controls.style.display="none";
+  if(!navigator.geolocation){if(status)status.textContent="📍 Location is required to view live attendance.";return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const dist=Math.round(calculateDistance(CLASSROOM_LAT,CLASSROOM_LNG,pos.coords.latitude,pos.coords.longitude));
+    if(dist<=MAX_ALLOWED_DISTANCE_METERS){
+      studentLiveLocationAllowed=true;
+      showStudentLiveSession();
+    }else{
+      studentLiveLocationAllowed=false;
+      if(status){status.className="message danger";status.textContent=`🔒 ${s.subject} is hidden because you are about ${dist}m away. Allowed radius: ${MAX_ALLOWED_DISTANCE_METERS}m.`;}
+      if(controls) controls.style.display="none";
+    }
+  },()=>{
+    if(status){status.className="message danger";status.textContent="⚠️ Location permission is required to view attendance.";}
+    if(controls) controls.style.display="none";
+  },{enableHighAccuracy:true,timeout:10000,maximumAge:15000});
+}
+
+function showStudentLiveSession(){
+  const s=activeSessions.find(x=>x.firebaseId===selectedStudentSessionId && sessionMatchesStudent(x));
+  if(!s) return;
+  activeSession=s;
+  const status=document.getElementById("studentLiveStatus"),controls=document.getElementById("studentAttendanceControls");
+  if(status){status.className="message";status.style.background="#dcfce7";status.style.color="#166534";status.textContent=`🟢 Live: ${s.subject}${s.batch&&s.batch!=="All"?" • "+s.batch:""} • Attendance is open`;}
+  if(controls)controls.style.display="block";
+  const sub=document.getElementById("studentSubject"); if(sub)sub.value=s.subject;
+  const popupText=document.getElementById("popupText"); if(popupText)popupText.textContent=`Class: ${s.subject}${s.batch&&s.batch!=="All"?" • "+s.batch:""} • Attendance is live`;
+  document.getElementById("liveSessionPopup")?.classList.remove("hidden");
+}
+
+function jumpToAttendance(){
+  document.getElementById("liveSessionPopup")?.classList.add("hidden");
+  showPage("attendance");
+}
+
+/* =========================
+QR SCANNER & GPS GEOFENCE
+========================= */
+function startScanner(){
+  const readerDiv = document.getElementById("reader");
+  if(!readerDiv){ alert("QR scanner area is unavailable."); return; }
+  readerDiv.classList.remove("hidden");
+  readerDiv.style.display = "block";
+  document.getElementById("closeScannerBtn").classList.remove("hidden");
+
+  html5QrCodeScanner = new Html5Qrcode("reader");
+  html5QrCodeScanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 200, height: 200 } },
+    (decodedText) => {
+      document.getElementById("attendanceCode").value = decodedText.trim();
+      stopScanner();
+      markPresent();
+    },
+    (errorMessage) => {}
+  ).catch(() => {
+    alert("Unable to start camera. Ensure camera permissions are allowed.");
+    stopScanner();
+  });
+}
+
+function stopScanner() {
+  if (html5QrCodeScanner) {
+    html5QrCodeScanner.stop().then(() => {
+      html5QrCodeScanner.clear();
+      document.getElementById("reader").style.display = "none";
+      document.getElementById("closeScannerBtn").classList.add("hidden");
+    }).catch(() => {
+      document.getElementById("reader").style.display = "none";
+      document.getElementById("closeScannerBtn").classList.add("hidden");
+    });
+  } else {
+    document.getElementById("reader").style.display = "none";
+    document.getElementById("closeScannerBtn").classList.add("hidden");
+  }
+}
+
+function verifyLocationAndSubmit(callback) {
+  if (!navigator.geolocation) {
+    alert("Geolocation is not supported by your browser.");
+    callback(false, null, null, 0);
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const studentLat = position.coords.latitude;
+      const studentLng = position.coords.longitude;
+      const distance = calculateDistance(CLASSROOM_LAT, CLASSROOM_LNG, studentLat, studentLng);
+      
+      if (distance <= MAX_ALLOWED_DISTANCE_METERS) {
+        callback(true, studentLat, studentLng, Math.round(distance));
+      } else {
+        alert(`❌ Location Check Failed!\nYou are outside the classroom boundary radius.\nDistance from class: ${Math.round(distance)} meters (Allowed: ${MAX_ALLOWED_DISTANCE_METERS}m).`);
+        callback(false, studentLat, studentLng, Math.round(distance));
+      }
+    },
+    () => {
+      alert("⚠️ GPS Location Permission Denied. Please enable location services to mark attendance.");
+      callback(false, null, null, 0);
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; 
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function logAttendanceAttempt(distance, lat, lng, reason){
+  if(!currentUser || !activeSession) return;
+  const payload={
+    id:Date.now(),
+    studentId:currentUser.id, studentName:currentUser.name, enroll:currentUser.enroll||"-",
+    department:currentUser.department, semester:currentUser.semester,
+    subject:activeSession.subject, sessionCode:activeSession.code, sessionId:activeSession.firebaseId||"", batch:activeSession.batch||"All",
+    studentLat:lat, studentLng:lng, distanceFromClass:distance,
+    allowedRadius:MAX_ALLOWED_DISTANCE_METERS, reason:reason||"Outside classroom boundary",
+    createdAt:Date.now(), date:new Date().toLocaleDateString(), time:new Date().toLocaleTimeString()
+  };
+  return window.addDocRef(window.colRef(window.dbCloud,"attendanceAttempts"),payload).catch(e=>console.error("Could not log attendance attempt",e));
+}
+
+function markPresent(){
+  if(!activeSession || !activeSession.active){ alert("No active attendance session running right now."); return; }
+  if(currentUser?.role!=="student"){ alert("Only students can mark attendance here."); return; }
+  if(!studentLiveLocationAllowed){
+    alert("Live attendance is not available at your current location. You must be within the 50-meter classroom boundary to see/mark this session.");
+    handleSessionAlertTrigger();
+    return;
+  }
+  const codeInput=document.getElementById("attendanceCode").value.trim();
+  if(codeInput!==activeSession.code){ alert("Invalid Attendance Code or QR text."); return; }
+
+  const sub=document.getElementById("studentSubject").value;
+  if(sub!==activeSession.subject){ alert("Selected subject does not match active class session subject."); return; }
+
+  const already=cachedAttendance.find(a=>String(a.studentId)===String(currentUser.id) && String(a.sessionId||"")===String(activeSession.firebaseId||"") && a.date===new Date().toLocaleDateString());
+  if(already){ alert("You have already marked attendance for this session."); return; }
+
+  verifyLocationAndSubmit((isWithinBoundary, lat, lng, dist) => {
+    if(!isWithinBoundary){
+      logAttendanceAttempt(dist,lat,lng,"Outside 50-meter classroom boundary");
+      alert(`❌ Attendance not recorded. Your location is ${dist}m from the classroom. Faculty/Admin have been notified of this attempt and can inspect the location.`);
+      return;
+    }
+
+    const record = {
+      id: Date.now(),
+      studentId: currentUser.id,
+      studentName: currentUser.name,
+      enroll: currentUser.enroll,
+      department: currentUser.department,
+      semester: currentUser.semester,
+      subject: activeSession.subject,
+      sessionId: activeSession.firebaseId||"",
+      batch: activeSession.batch||"All",
+      date: new Date().toLocaleDateString(),
+      status: "Present",
+      studentLat: lat,
+      studentLng: lng,
+      distanceFromClass: dist
+    };
+
+    window.addDocRef(window.colRef(window.dbCloud, "attendance"), record).then(() => {
+      alert(`✅ Attendance Marked Successfully!\n📍 Verified within classroom zone (${dist}m away).`);
+      document.getElementById("attendanceCode").value="";
+      refreshAll();
+    });
+  });
+}
+
+function renderLocationAlerts(){
+  const body=document.getElementById("locationAlertsTable");
+  if(!body) return;
+  const staff=currentUser && (currentUser.role==="admin" || currentUser.role==="faculty");
+  if(!staff){ body.innerHTML=""; return; }
+  const items=cachedAttendanceAttempts.slice(0,50);
+  body.innerHTML=items.map(a=>{
+    const mapBtn=(a.studentLat!=null && a.studentLng!=null) ? `<button class="primary" style="padding:5px 10px;font-size:12px;" onclick="trackStudentLocation(${Number(a.studentLat)},${Number(a.studentLng)},'${escapeJs(a.studentName)}','${escapeJs(a.enroll)}',${Number(a.distanceFromClass||0)})">📍 View</button>` : "N/A";
+    return `<tr><td>${escapeHtml(a.studentName||"-")}<br><small>${escapeHtml(a.enroll||"")}</small></td><td>${escapeHtml(a.subject||"-")}</td><td><b>${escapeHtml(a.distanceFromClass??"-")}m</b></td><td>${a.studentLat!=null?escapeHtml(Number(a.studentLat).toFixed(6))+", "+escapeHtml(Number(a.studentLng).toFixed(6)):"N/A"}</td><td>${escapeHtml(a.time||"")}<br><small>${escapeHtml(a.date||"")}</small></td><td>${mapBtn}</td></tr>`;
+  }).join("") || '<tr><td colspan="6">No outside-boundary attendance attempts.</td></tr>';
+}
+
+function escapeJs(v){return String(v??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/"/g,'\\"');}
+
+/* =========================
+TRACKER MODAL
+========================= */
+function trackStudentLocation(lat, lng, studentName, enroll, distance) {
+  if(!lat || !lng) { alert("Location coordinates were not recorded."); return; }
+  document.getElementById("trackerTitle").textContent = `📍 Tracker: ${studentName} (${enroll})`;
+  document.getElementById("trackerDetails").innerHTML = `<b>Distance from classroom:</b> ${distance} meters away<br><b>GPS Coordinates:</b> Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`;
+  document.getElementById("mapFrame").src = `https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed`;
+  document.getElementById("trackerModal").classList.remove("hidden");
+}
+function closeTrackerModal() { document.getElementById("trackerModal").classList.add("hidden"); }
+
+/* =========================
+UI HELPERS & MANAGEMENT TABS
+========================= */
+function loadDropdowns(){
+  const departments=cachedDepartments||[];
+  ["sessionDepartment","newStudentDept","regDept","subjectDepartment","facultyDepartment"].forEach(id=>{
+    const el=document.getElementById(id); if(!el)return;
+    el.innerHTML='<option value="">Select Department</option>'+departments.map(d=>`<option value="${d.firebaseId}">${d.name}</option>`).join("");
+  });
+  const sems=["1","2","3","4","5","6","7","8"];
+  ["sessionSemester","newStudentSem","regSem","academicSemester","facultySemester"].forEach(id=>{
+    const el=document.getElementById(id); if(!el)return;
+    el.innerHTML='<option value="">Select Semester</option>'+sems.map(x=>`<option value="${x}">Semester ${x}</option>`).join("");
+  });
+  const td=document.getElementById("timetableDepartment");
+  if(td){
+    td.innerHTML='<option value="">Select Department</option>'+departments.map(d=>`<option value="${d.firebaseId}">${d.name}</option>`).join("");
+    const cfg=getTimetableConfig();
+    const match=departments.find(d=>d.firebaseId===cfg.departmentId || d.name===cfg.departmentName || /information technology|\bit\b/i.test(d.name||""));
+    if(match) td.value=match.firebaseId;
+  }
+  updateDependentSubjects();
+  if(currentUser?.role==="student") {
+    const d=getDepartmentObj(currentUser.department);
+    loadSubjects("studentSubject",d,currentUser.semester);
+    document.getElementById("studentAttendanceContext").textContent="Department: "+getDepartment(currentUser.department)+" • Semester: "+currentUser.semester;
+  }
+}
+
+function loadSubjects(id, dept, sem){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const subjects=Array.isArray(dept?.semesters?.[sem]) ? dept.semesters[sem] : [];
+  el.innerHTML='<option value="">Select Subject</option>'+subjects.map(sub=>`<option value="${sub}">${sub}</option>`).join("");
+}
+
+function getDepartmentObj(id){ return (cachedDepartments||[]).find(d=>d.firebaseId===id || String(d.id)===String(id)); }
+function getDepartment(id){ const d=getDepartmentObj(id); return d?d.name:"-"; }
+
+function updateDependentSubjects(){
+  const sessionDept = document.getElementById("sessionDepartment");
+  const sessionSem = document.getElementById("sessionSemester");
+  if(sessionDept && sessionSem) {
+    sessionDept.onchange = () => loadSubjects("sessionSubject", getDepartmentObj(sessionDept.value), sessionSem.value);
+    sessionSem.onchange = () => loadSubjects("sessionSubject", getDepartmentObj(sessionDept.value), sessionSem.value);
+  }
+  const subDept = document.getElementById("subjectDepartment");
+  const acadSem = document.getElementById("academicSemester");
+  if(subDept && acadSem) {
+    subDept.onchange = () => loadSubjects("subjectName", getDepartmentObj(subDept.value), acadSem.value);
+  }
+}
+
+function loadRegistrationDropdowns(){
+  document.getElementById("regDept").innerHTML='<option value="">Select Department</option>'+(cachedDepartments||[]).map(d=>`<option value="${d.firebaseId}">${d.name}</option>`).join("");
+  document.getElementById("regSem").innerHTML='<option value="">Select Semester</option>'+["1","2","3","4","5","6","7","8"].map(x=>`<option value="${x}">Semester ${x}</option>`).join("");
+}
+
+function loadNoteDepartmentDropdown(){
+  const el=document.getElementById("noteDepartment");
+  if(!el) return;
+  const current=el.value;
+  el.innerHTML='<option value="">Select Department</option>'+(cachedDepartments||[]).map(d=>`<option value="${escapeHtml(d.firebaseId)}">${escapeHtml(d.name)}</option>`).join("");
+  if(current) el.value=current;
+}
+
+function refreshAll(){
+  const sessionStatus=document.getElementById("sessionStatus");
+  if(currentUser && (currentUser.role==="admin" || currentUser.role==="faculty")){
+    applyTimetableConfig(getTimetableConfig());
+    renderTimetableEditor();
+    const cfg=getTimetableConfig();
+    const slot=getCurrentTimetableSlot();
+    const info=document.getElementById("autoSessionInfo");
+    if(info){
+      if(cfg.autoMode!=="on") info.innerHTML='<div class="auto-closed">🔴 Automatic mode is OFF. Attendance is controlled manually.</div>';
+      else if(activeSessions.length) info.innerHTML=`<div class="auto-live">🟢 ${activeSessions.length} active session(s): ${activeSessions.map(s=>escapeHtml(s.subject+(s.batch&&s.batch!=="All"?" • "+s.batch:""))).join(", ")}</div>`;
+      else if(slot) info.innerHTML=`<div class="auto-live">⏱️ Current timetable: ${slot.subject} • ${slot.start}–${slot.end} • Period ${slot.period}. Automatic session will be/has been started by the scheduler.</div>`;
+      else info.innerHTML='<div class="auto-closed">⚪ No scheduled lecture at the current time.</div>';
+    }
+    startAutomaticScheduler();
+  }
+
+  if(sessionStatus && (currentUser?.role==="admin" || currentUser?.role==="faculty")){
+    sessionStatus.innerHTML = activeSessions.length ? `🟢 ${activeSessions.length} attendance session(s) ACTIVE` : "🔴 No attendance session is ACTIVE";
+  }
+
+  if(currentUser?.role==="admin"||currentUser?.role==="faculty"){ renderActiveSessionCodeList(); }
+  if(currentUser?.role==="student"){ handleSessionAlertTrigger(); }
+
+  loadNoteDepartmentDropdown();
+  renderLocationAlerts();
+  const students=cachedUsers.filter(u=>u.role==="student");
+  document.getElementById("totalStudents").textContent=students.length;
+  const presentCount=cachedAttendance.filter(a=>a.date===new Date().toLocaleDateString()).length;
+  document.getElementById("totalPresent").textContent=presentCount;
+  document.getElementById("totalAbsent").textContent=Math.max(0, students.length - presentCount);
+  document.getElementById("overallPercentage").textContent=students.length ? Math.round((presentCount/(students.length))*100)+"%" : "0%";
+
+  const historyBody=document.getElementById("historyTable");
+  if(historyBody){
+    let items=cachedAttendance;
+    if(currentUser?.role==="student"){ items=items.filter(a=>String(a.studentId)===String(currentUser.id)); }
+    historyBody.innerHTML=items.map(a=>`
+      <tr>
+        <td>${a.studentName}</td><td>${a.enroll}</td><td>${a.subject}</td><td>${a.date}</td>
+        <td><b>${a.distanceFromClass !== undefined ? a.distanceFromClass + 'm' : 'N/A'}</b></td>
+        <td><span class="badge present">${a.status}</span></td>
+        <td>${currentUser?.role !== 'student' ? `<button class="primary" style="padding:5px 10px; font-size:12px;" onclick="trackStudentLocation(${a.studentLat}, ${a.studentLng}, '${a.studentName}', '${a.enroll}', ${a.distanceFromClass})">📍 Track</button>` : 'N/A'}</td>
+      </tr>
+    `).join("") || '<tr><td colspan="7">No attendance records found.</td></tr>';
+  }
+
+  const studentTableBody=document.getElementById("studentTable");
+  if(studentTableBody){
+    studentTableBody.innerHTML=students.map(s=>`
+      <tr>
+        <td>${s.name}</td><td>${s.enroll||'-'}</td><td>${s.email||'-'}</td>
+        <td>${getDepartment(s.department)}</td><td>${s.semester}</td><td>${s.batch||"-"}</td><td>${s.username}</td>
+        <td><button class="danger" style="padding:5px 10px; font-size:12px;" onclick="deleteUser('${s.firebaseId}')">Delete</button></td>
+      </tr>
+    `).join("") || '<tr><td colspan="8">No students found.</td></tr>';
+  }
+}
+
+function canManageTargetPassword(targetRole){
+  const role=currentUser?.role;
+  if(role==="admin" || role==="developer") return targetRole==="student" || targetRole==="faculty";
+  if(role==="faculty") return targetRole==="student";
+  return false;
+}
+
+async function setUserPassword(firebaseId){
+  if(!currentUser || !["admin","developer","faculty"].includes(currentUser.role)){
+    alert("You are not authorized to manage passwords."); return;
+  }
+  const target=cachedUsers.find(u=>u.firebaseId===firebaseId);
+  if(!target || !canManageTargetPassword(target.role)){
+    alert("You are not authorized to change this user's password."); return;
+  }
+  const newPassword=prompt("Set a new password for " + (target.name || target.username || "this user") + ":");
+  if(newPassword===null) return;
+  if(newPassword.length<6){ alert("Password must be at least 6 characters."); return; }
+  const confirmPassword=prompt("Confirm the new password:");
+  if(confirmPassword===null) return;
+  if(newPassword!==confirmPassword){ alert("Passwords do not match."); return; }
+  try{
+    await window.updateDocRef(window.docRef(window.dbCloud,"users",firebaseId),{
+      password:newPassword,
+      passwordChangedAt:Date.now(),
+      passwordChangedBy:currentUser.username || currentUser.name || currentUser.role
+    });
+    alert("Password updated successfully for " + (target.name || target.username) + ".");
+  }catch(e){
+    console.error("PASSWORD UPDATE ERROR:",e);
+    alert("Unable to update password: " + (e?.message || e));
+  }
+}
+
+function renderPasswordManagement(){
+  const body=document.getElementById("passwordManagementTable");
+  const note=document.getElementById("passwordPermissionNote");
+  if(!body || !currentUser) return;
+  if(!["admin","developer","faculty"].includes(currentUser.role)){
+    body.innerHTML='<tr><td colspan="6">Password Management is not available for this account.</td></tr>';
+    return;
+  }
+  const isStaff=currentUser.role==="admin" || currentUser.role==="developer";
+  const targets=cachedUsers.filter(u=>canManageTargetPassword(u.role));
+  if(note){
+    note.textContent=isStaff
+      ? "Admin and Developer can set passwords for Students and Faculty. Existing passwords are never displayed."
+      : "Faculty can set passwords for Students only. Faculty/Admin/Developer passwords cannot be changed here.";
+  }
+  body.innerHTML=targets.map(u=>{
+    const roleLabel=String(u.role||"").toUpperCase();
+    const idLabel=u.enroll || u.id || "-";
+    return `<tr>
+      <td>${escapeHtml(u.name||"-")}</td>
+      <td><span class="badge ${u.role==="student"?"present":""}">${escapeHtml(roleLabel)}</span></td>
+      <td>${escapeHtml(u.username||"-")}</td>
+      <td>${escapeHtml(String(idLabel))}</td>
+      <td>${escapeHtml(getDepartment(u.department)||"-")}</td>
+      <td><button class="primary" style="padding:7px 10px;font-size:12px;" onclick="setUserPassword('${escapeJs(u.firebaseId)}')">🔑 Set New Password</button></td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="6">No users available for password management.</td></tr>';
+}
+
+function addStudent(){
+  let name=document.getElementById("newStudentName").value.trim();
+  let enroll=document.getElementById("newStudentEnroll").value.trim();
+  let email=document.getElementById("newStudentEmail").value.trim().toLowerCase();
+  let phone=document.getElementById("newStudentPhone").value.trim();
+  let dept=document.getElementById("newStudentDept").value;
+  let sem=document.getElementById("newStudentSem").value;
+  let batch=document.getElementById("newStudentBatch").value;
+  let username=document.getElementById("newStudentUsername").value.trim();
+  let password=document.getElementById("newStudentPassword").value;
+
+  if(!name||!enroll||!username||!password||!dept||!sem||!batch||!phone){ alert("Fill all student details, including batch and mobile number."); return; }
+  if(cachedUsers.some(u=>u.username===username || u.enroll===enroll || normalizePhone(u.phone)===normalizePhone(phone) || String(u.email||"").toLowerCase()===email)){ alert("Username, enrollment, mobile number, or email is already registered."); return; }
+  window.addDocRef(window.colRef(window.dbCloud, "users"), {id:Date.now(), role:"student", name, enroll, email, phone, department:dept, semester:sem, batch, username, password}).then(()=>{
+    alert("Student added successfully to cloud database!");
+    refreshAll();
+  });
+}
+
+function addFaculty(){
+  if(!currentUser || currentUser.role!=="admin"){ alert("Only Admin can manage Faculty accounts."); return; }
+  let name=document.getElementById("facultyName").value.trim();
+  let id=document.getElementById("facultyId").value.trim();
+  let username=document.getElementById("facultyUsername").value.trim();
+  let email=document.getElementById("facultyEmail").value.trim().toLowerCase();
+  let phone=document.getElementById("facultyPhone").value.trim();
+  let password=document.getElementById("facultyPassword").value;
+  let dept=document.getElementById("facultyDepartment").value;
+  let sem=document.getElementById("facultySemester").value;
+  if(!name||!username||!email||!phone||!password){ alert("Fill all faculty details, including email and mobile number."); return; }
+  if(cachedUsers.some(u=>u.username===username || normalizePhone(u.phone)===normalizePhone(phone) || String(u.email||"").toLowerCase()===email)){ alert("Username, mobile number, or email is already registered."); return; }
+  window.addDocRef(window.colRef(window.dbCloud, "users"), {id:Date.now(), role:"faculty", name, enroll:id||"FAC-"+Date.now(), username, email, phone, password, department:dept, semester:sem, status:"approved"}).then(()=>{
+    alert("Faculty account created successfully!");
+    document.getElementById("facultyPassword").value="";
+    refreshAll();
+  }).catch(e=>{console.error(e);alert("Unable to create faculty account: "+(e.message||e));});
+}
+
+function deleteUser(firebaseId){
+  if(confirm("Delete user account from cloud database?")){
+    window.deleteDocRef(window.docRef(window.dbCloud, "users", firebaseId)).then(()=>refreshAll());
+  }
+}
+
+function addDepartment(){
+  let name=document.getElementById("departmentName").value.trim();
+  if(!name){ alert("Enter department name."); return; }
+  window.addDocRef(window.colRef(window.dbCloud, "departments"), {id:Date.now(), name, semesters:{}}).then(()=>{
+    alert("Department added!");
+    document.getElementById("departmentName").value="";
+  });
+}
+
+function addAcademic(){
+  let deptId=document.getElementById("subjectDepartment").value;
+  let sem=document.getElementById("academicSemester").value;
+  let subName=document.getElementById("subjectName").value.trim();
+  let d=getDepartmentObj(deptId);
+  if(!d||!sem||!subName){ alert("Select department, semester, and enter subject name."); return; }
+  
+  if(!d.semesters) d.semesters={};
+  if(!d.semesters[sem]) d.semesters[sem]=[];
+  if(!d.semesters[sem].includes(subName)) d.semesters[sem].push(subName);
+
+  window.updateDocRef(window.docRef(window.dbCloud, "departments", d.firebaseId), { semesters: d.semesters }).then(()=>{
+    alert("Subject added successfully!");
+    document.getElementById("subjectName").value="";
+  });
+}
+
+function noteVisibleToUser(n){
+  if(!currentUser) return false;
+  if(currentUser.role!=="student") return true;
+  if((n.audienceType||"all")==="all") return true;
+  return String(n.department||"")===String(currentUser.department||"") && String(n.semester||"")===String(currentUser.semester||"");
+}
+
+function updateNotificationCount(){
+  const count=cachedNotes.filter(noteVisibleToUser).length;
+  const el=document.getElementById("notificationCount");
+  if(el) el.textContent=count;
+}
+
+function showNoteNotification(n){
+  const toast=document.createElement("div");
+  toast.style.cssText="position:fixed;right:20px;top:85px;z-index:9999;background:#fff;border-left:5px solid #2563eb;box-shadow:0 8px 25px #0002;border-radius:12px;padding:14px 18px;max-width:360px;";
+  toast.innerHTML=`<b>🔔 New ${n.type||"note"}</b><div style="margin-top:4px;">${escapeHtml(n.title||"New announcement")}</div><small style="color:#64748b;">${escapeHtml(n.author||"Staff")} • ${escapeHtml(n.date||"")}</small>`;
+  document.body.appendChild(toast);
+  setTimeout(()=>toast.remove(),6000);
+}
+
+async function addNote(){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Students cannot publish notes. Only Admin or Faculty can publish."); return; }
+  if(!window.firebaseReady || !window.dbCloud){ throw new Error("Firebase is not ready. Refresh the page and make sure Firebase loads before publishing."); }
+  const title=document.getElementById("noteTitle").value.trim();
+  const text=document.getElementById("noteText").value.trim();
+  const audienceType=document.getElementById("noteAudienceType").value;
+  const department=document.getElementById("noteDepartment").value;
+  const semester=document.getElementById("noteSemester").value;
+  const files=[...(document.getElementById("noteFiles")?.files||[])];
+  if(!title){ alert("Enter note title."); return; }
+  if(audienceType==="specific" && (!department||!semester)){ alert("Select department and semester for a specific note."); return; }
+  try{
+    const attachments=[];
+    const totalFiles=files.length;
+    for(let i=0;i<files.length;i++){
+      const file=files[i];
+      const status=document.getElementById("noteUploadStatus");
+      if(status) status.textContent=`Uploading file ${i+1} of ${totalFiles}: ${file.name}`;
+      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+      const path=`notes/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+      if(window.firebaseAuth){
+        try {
+          if(typeof window.ensureFirebaseAuth === "function") await window.ensureFirebaseAuth();
+          else if(!window.firebaseAuth.currentUser) await window.firebaseAuth.signInAnonymously();
+        } catch(authError){
+          throw new Error("Firebase Authentication is not ready for file upload. Enable Authentication > Sign-in method > Anonymous. Details: " + (authError.code||"") + " " + (authError.message||authError));
+        }
+      }
+      if(!window.storageCloud) throw new Error("Firebase Storage is not initialized.");
+      const storageReference=window.storageRef(window.storageCloud,path);
+      await new Promise((resolve,reject)=>{
+        const task=storageReference.put(file,{contentType:file.type || "application/octet-stream"});
+        task.on("state_changed",snap=>{
+          const pct=snap.totalBytes ? Math.round((snap.bytesTransferred/snap.totalBytes)*100) : 0;
+          const st=document.getElementById("noteUploadStatus");
+          if(st) st.textContent=`Uploading file ${i+1} of ${totalFiles}: ${file.name} — ${pct}%`;
+        },reject,resolve);
+      });
+      const url=await window.getDownloadURLRef(storageReference);
+      attachments.push({name:file.name,url,type:file.type||"application/octet-stream",size:file.size});
+    }
+    const status=document.getElementById("noteUploadStatus");
+    if(status) status.textContent="Saving note...";
+    await window.addDocRef(window.colRef(window.dbCloud,"notes"),{
+      id:Date.now(), title, text, audienceType, department:audienceType==="specific"?department:"", semester:audienceType==="specific"?semester:"",
+      attachments, author:currentUser.name, authorRole:currentUser.role, date:new Date().toLocaleDateString(), createdAt:Date.now(), type:"announcement"
+    });
+    alert("Note published successfully. Targeted students will receive it in real time.");
+    document.getElementById("noteTitle").value=""; document.getElementById("noteText").value="";
+    document.getElementById("noteFiles").value="";
+  }catch(e){
+    console.error("NOTE PUBLISH ERROR:",e);
+    const status=document.getElementById("noteUploadStatus");
+    if(status) status.textContent="";
+    const code=e && e.code ? e.code : "unknown";
+    const message=e && e.message ? e.message : String(e);
+    let help="";
+    if(code.includes("storage/unauthorized") || code.includes("storage/unauthenticated")){
+      help="\n\nFix: Firebase Console → Authentication → Sign-in method → enable Anonymous, then Firebase Console → Storage → Rules → allow authenticated uploads.";
+    } else if(code.includes("storage/unknown") || code.includes("storage/bucket-not-found")){
+      help="\n\nFix: Firebase Console → Storage → Get started/enable Storage and verify the Storage bucket in the project.";
+    }
+    alert("Unable to publish note.\n\nFirebase error: " + code + "\n" + message + help);
+  }
+}
+
+async function deleteNote(firebaseId){
+  if(!currentUser || (currentUser.role!=="admin" && currentUser.role!=="faculty")){ alert("Only Admin or Faculty can delete notes."); return; }
+  if(!confirm("Delete this note/announcement?")) return;
+  try{ await window.deleteDocRef(window.docRef(window.dbCloud,"notes",firebaseId)); }catch(e){ console.error(e); alert("Unable to delete note."); }
+}
+
+function renderNotes(){
+  const notesList=document.getElementById("notesList");
+  if(!notesList) return;
+  const visible=cachedNotes.filter(noteVisibleToUser).sort((a,b)=>(b.createdAt||b.id||0)-(a.createdAt||a.id||0));
+  notesList.innerHTML=visible.map(n=>{
+    const target=n.audienceType==="specific" ? `${getDepartment(n.department)} • Semester ${escapeHtml(n.semester)}` : "Everyone";
+    const files=(n.attachments||[]).map(a=>`<div style="margin-top:8px;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" download style="font-weight:700;">📎 ${escapeHtml(a.name)} — Download</a></div>`).join("");
+    const del=(currentUser?.role==="admin"||currentUser?.role==="faculty") ? `<button class="danger" style="margin-top:10px;padding:6px 10px;font-size:12px;" onclick="deleteNote('${n.firebaseId}')">🗑️ Delete</button>` : "";
+    return `<div style="background:#f8fafc;padding:16px;border-radius:12px;margin-bottom:12px;border:1px solid #e2e8f0;">
+      <h3 style="margin:0 0 7px;">${escapeHtml(n.title)}</h3>
+      <div style="font-size:12px;color:#2563eb;font-weight:700;margin-bottom:8px;">🎯 ${target}</div>
+      <p style="margin:8px 0;color:#334155;white-space:pre-wrap;">${escapeHtml(n.text||"")}</p>
+      ${files}
+      <small style="display:block;margin-top:10px;color:#64748b;">Posted by ${escapeHtml(n.author||"Staff")} on ${escapeHtml(n.date||"")}</small>
+      ${del}
+    </div>`;
+  }).join("") || '<p>No notes or announcements for your department/semester.</p>';
+  updateNotificationCount();
+}
+
+function verifyAndResetCloudDB() {
+  if(!currentUser || currentUser.role!=="admin"){ alert("Only Admin can reset the cloud database."); return; }
+  let pass = prompt("Enter Admin/Faculty Password to authorize cloud database reset:");
+  if(!pass) return;
+  let verified = cachedUsers.find(u => (u.role === "admin" || u.role === "faculty") && u.password === pass);
+  if(!verified) { alert("Authorization failed! Incorrect password."); return; }
+
+  if(confirm("WARNING: This will clear all attendance logs from the cloud database. Proceed?")) {
+    window.getDocsRef(window.colRef(window.dbCloud, "attendance")).then(snapshot => {
+      let batch = window.writeBatchRef(window.dbCloud);
+      snapshot.docs.forEach(docSnap => batch.delete(docSnap.ref));
+      batch.commit().then(() => {
+        alert("Cloud attendance records cleared successfully.");
+        refreshAll();
+      });
+    });
+  }
+}
+</script>
+<script>
+// Surface module/Firebase errors instead of silently leaving the login screen stuck.
+window.firebaseInitError = window.firebaseInitError || null;
+window.addEventListener("error", function(e){
+  const msg=String(e?.error?.message || e?.message || "Unknown JavaScript error");
+  if(msg && /firebase|firestore|storage|module/i.test(msg)) window.firebaseInitError=msg;
+});
+window.addEventListener("unhandledrejection", function(e){
+  const msg=String(e?.reason?.message || e?.reason || "Unknown Firebase error");
+  if(msg && /firebase|firestore|storage|module/i.test(msg)) window.firebaseInitError=msg;
+});
+</script>
+
+<script>
+// Reliable Notes publish button handler. Uses addEventListener instead of inline onclick.
+document.addEventListener("DOMContentLoaded", function(){
+  const btn=document.getElementById("publishNoteBtn");
+  if(!btn) return;
+  btn.addEventListener("click", async function(){
+    btn.disabled=true;
+    const oldText=btn.textContent;
+    btn.textContent="⏳ Publishing...";
+    const status=document.getElementById("noteUploadStatus");
+    if(status) status.textContent="Preparing note...";
+    try {
+      if(typeof addNote !== "function") throw new Error("Notes publishing function was not loaded. Please reopen the latest HTML file.");
+      await addNote();
+    } catch(e) {
+      console.error("Publish button error:",e);
+      alert("Publish failed: " + (e?.message || e));
+    } finally {
+      btn.disabled=false;
+      btn.textContent=oldText;
+    }
+  });
+});
+</script>
+
+<script>
+function renderDeviceLocks(){
+  const body=document.getElementById("deviceLocksTable");
+  if(!body) return;
+  if(!currentUser || !["admin","developer"].includes(currentUser.role)){
+    body.innerHTML='<tr><td colspan="5">Only Admin and Developer can manage device locks.</td></tr>'; return;
+  }
+  const rows=[...cachedDeviceLocks].sort((a,b)=>(b.lastSeenAt||0)-(a.lastSeenAt||0));
+  body.innerHTML=rows.map(d=>`<tr><td>${escapeHtml(d.name||d.username||"-")}<br><small>${escapeHtml(d.username||"")}</small></td><td>${escapeHtml(String(d.role||"").toUpperCase())}</td><td><code>${escapeHtml(d.firebaseId||"-")}</code></td><td>${escapeHtml(d.lastSeenAt?new Date(d.lastSeenAt).toLocaleString():"-")}</td><td><button class="danger" style="padding:6px 10px;font-size:12px;" onclick="releaseDevice('${escapeJs(d.firebaseId)}')">Release Device</button></td></tr>`).join("")||'<tr><td colspan="5">No device locks found.</td></tr>';
+}
+
+async function releaseDevice(deviceId){
+  if(!currentUser || !["admin","developer"].includes(currentUser.role)){alert("Only Admin and Developer can release devices.");return;}
+  const target=cachedDeviceLocks.find(d=>d.firebaseId===deviceId); if(!target)return;
+  if(!confirm("Release this device from "+(target.name||target.username||"the account")+"? The account will need to log in again on this device."))return;
+  try{
+    await window.deleteDocRef(window.docRef(window.dbCloud,"deviceLocks",deviceId));
+    alert("Device released successfully.");
+  }catch(e){console.error(e);alert("Unable to release device: "+(e?.message||e));}
+}
+
+// =========================
+// PWA / INSTALL / SHARE
+// =========================
+let deferredInstallPrompt = null;
+const APP_URL = window.SMART_ATTENDANCE_APP_URL || window.location.href;
+
+function renderPwaLink(){
+  const urlEl=document.getElementById("pwaAppUrl");
+  if(urlEl) urlEl.textContent=APP_URL;
+  const qr=document.getElementById("pwaQr");
+  if(qr && window.QRCode){
+    qr.innerHTML="";
+    new QRCode(qr,{text:APP_URL,width:210,height:210,correctLevel:QRCode.CorrectLevel.M});
+  }
+}
+
+async function installPWA(){
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    const result=await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt=null;
+    const btn=document.getElementById("installPwaBtn");
+    if(btn) btn.textContent=result.outcome==="accepted" ? "✅ App Installed" : "📲 Install App";
+    return;
+  }
+  if(window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone===true){
+    alert("Smart Attendance is already installed as an app.");
+  }else{
+    alert("Your browser has not provided an install prompt yet. On iPhone/iPad, use Safari → Share → Add to Home Screen.");
+  }
+}
+
+async function copyAppLink(){
+  try{ await navigator.clipboard.writeText(APP_URL); alert("App link copied!"); }
+  catch(e){ prompt("Copy this app link:",APP_URL); }
+}
+
+async function shareAppLink(){
+  if(navigator.share){
+    try{ await navigator.share({title:"Smart Attendance System",text:"Open Smart Attendance System",url:APP_URL}); }catch(e){}
+  }else{ await copyAppLink(); }
+}
+
+function updatePwaStatus(){
+  const online=navigator.onLine;
+  const el=document.getElementById("pwaStatus");
+  if(el){ el.textContent=online ? "🟢 Online" : "🟠 Offline — cached app shell available"; el.style.background=online?"#ecfdf5":"#fff7ed"; el.style.color=online?"#166534":"#9a3412"; }
+}
+
+function updateStandaloneStatus(){
+  const standalone=window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone===true;
+  const el=document.getElementById("standaloneStatus");
+  if(el) el.textContent=standalone ? "📱 Standalone app mode" : "🌐 Browser mode";
+}
+
+window.addEventListener("beforeinstallprompt",e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  const btn=document.getElementById("installPwaBtn");
+  if(btn) btn.textContent="📲 Install App";
+});
+window.addEventListener("appinstalled",()=>{ deferredInstallPrompt=null; const btn=document.getElementById("installPwaBtn"); if(btn) btn.textContent="✅ App Installed"; updateStandaloneStatus(); });
+window.addEventListener("online",updatePwaStatus);
+window.addEventListener("offline",updatePwaStatus);
+
+document.addEventListener("DOMContentLoaded",async()=>{
+  renderPwaLink(); updatePwaStatus(); updateStandaloneStatus();
+  try{ const started=Date.now(); while(!window.firebaseReady&&!window.firebaseInitError&&Date.now()-started<8000) await new Promise(r=>setTimeout(r,100)); await restorePersistentSession(); }catch(e){console.warn("Session restore skipped",e);}
+  if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){
+    navigator.serviceWorker.register("service-worker.js").catch(err=>console.warn("PWA service worker registration failed:",err));
+  }
+});
+</script>
+
+<!-- MOBILE BOTTOM NAVIGATION -->
+<div id="mobileBottomNav" style="position:fixed;left:0;right:0;bottom:0;background:white;border-top:1px solid #e2e8f0;display:none;grid-template-columns:repeat(4,1fr);z-index:120;padding:6px 5px;box-shadow:0 -5px 18px rgba(15,23,42,.08);">
+<button style="background:none;padding:7px 3px;font-size:11px;" onclick="showPage('dashboard')">🏠<br>Home</button>
+<button style="background:none;padding:7px 3px;font-size:11px;" onclick="showPage('attendance')">🎯<br>Attendance</button>
+<button style="background:none;padding:7px 3px;font-size:11px;" onclick="showPage('notes')">📚<br>Notes</button>
+<button style="background:none;padding:7px 3px;font-size:11px;" onclick="showPage('installApp')">📲<br>App</button>
+</div>
+<style>@media(max-width:700px){#mobileBottomNav{display:grid;} body{padding-bottom:70px;} .container{padding:12px;} .logo{font-size:16px;} .user-info{font-size:12px;}}</style>
+</body>
+</html>
