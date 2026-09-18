@@ -776,31 +776,20 @@ function initCloudSync() {
 window.onSnapshotRef(
   window.colRef(window.dbCloud, "departments"),
   snapshot => {
-
     cachedDepartments = snapshot.docs.map(doc => ({
       ...doc.data(),
       firebaseId: doc.id
     }));
 
-    console.log(
-      "🔥 Firestore departments:",
-      cachedDepartments
-    );
+    console.log("✅ Departments received:", cachedDepartments);
 
     loadDropdowns();
-
   },
   error => {
-    console.error(
-      "❌ Departments Firestore sync failed:",
-      error
-    );
-
-    cachedDepartments = [];
-    loadDropdowns();
+    console.error("❌ DEPARTMENT FIRESTORE READ ERROR:", error);
+    alert("Department read error: " + error.message);
   }
 );
-
   // Sync Attendance
   window.onSnapshotRef(window.colRef(window.dbCloud, "attendance"), snapshot => {
     cachedAttendance = snapshot.docs.map(doc => doc.data());
