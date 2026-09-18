@@ -773,21 +773,25 @@ function initCloudSync() {
   });
 
 // Sync Departments
-window.onSnapshotRef(
-  window.colRef(window.dbCloud, "departments"),
+window.dbCloud.collection("departments").onSnapshot(
   snapshot => {
     cachedDepartments = snapshot.docs.map(doc => ({
       ...doc.data(),
       firebaseId: doc.id
     }));
 
-    console.log("✅ Departments received:", cachedDepartments);
+    console.log("✅ Departments synced to app:", cachedDepartments);
 
+    // Update all department dropdowns
     loadDropdowns();
+
+    // Refresh the rest of the application
+    if (typeof refreshAll === "function") {
+      refreshAll();
+    }
   },
   error => {
-    console.error("❌ DEPARTMENT FIRESTORE READ ERROR:", error);
-    alert("Department read error: " + error.message);
+    console.error("❌ Departments Firestore listener error:", error);
   }
 );
   // Sync Attendance
