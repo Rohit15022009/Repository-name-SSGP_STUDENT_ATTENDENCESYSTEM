@@ -76,31 +76,6 @@ th{background:#f8fafc;}
 /* CODE */
 .attendance-code{text-align:center;font-size:42px;letter-spacing:8px;font-weight:bold;background:#eff6ff;color:#1d4ed8;padding:25px;border-radius:15px;margin:15px 0;}
 .hidden{display:none!important;}
-/* LOGIN PAGE FIX */
-#loginPage:not(.hidden){
-    display:block !important;
-    width:100% !important;
-    min-width:0 !important;
-    min-height:100vh !important;
-    height:auto !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    position:relative !important;
-    box-sizing:border-box !important;
-}
-
-#loginPage:not(.hidden) .container{
-    width:100% !important;
-    min-height:100vh !important;
-    box-sizing:border-box !important;
-}
-
-#loginPage:not(.hidden) .login-box{
-    box-sizing:border-box !important;
-    width:min(92vw,460px) !important;
-    max-width:460px !important;
-    margin:40px auto !important;
-}
 .message{padding:10px;border-radius:8px;margin:10px 0;}
 
 /* REAL-TIME STUDENT SESSION ALERT POPUP */
@@ -135,7 +110,7 @@ th{background:#f8fafc;}
 </head>
 
 <body>
-<div id="loginPage" class="hidden">
+<div id="loginPage">
   <div class="container">
     <div class="card login-box">
       <h1>🎓 Smart Attendance System</h1>
@@ -417,7 +392,7 @@ Submit Attendance (Auto-Verify GPS & Code)
 
 <div class="card admin-faculty-only" id="accountSecurityCard">
 <h2>🔐 Account Security</h2>
-<p style="color:#64748b;font-size:14px;">Change your own password. A verified OTP is required for password recovery.</p>
+<p style="color:#64748b;font-size:14px;">Change your own password securely using Firebase Authentication email reset.</p>
 <button class="primary" onclick="openChangePassword()">🔑 Change Password</button>
 </div>
 
@@ -721,91 +696,104 @@ function startAutomaticScheduler(){
   runAutomaticAttendanceCheck();
 }
 
+let cloudUnsubscribers = [];
+let cloudSyncStarted = false;
+
+function stopCloudSync(){
+  cloudUnsubscribers.forEach(fn=>{try{if(typeof fn==="function")fn();}catch(e){console.error(e);}});
+  cloudUnsubscribers=[];
+  cloudSyncStarted=false;
+}
+
 function initCloudSync() {
-  if(!window.dbCloud) { setTimeout(initCloudSync, 100); return; }
+  if(!window.dbCloud || !window.firebaseAuth || !window.firebaseAuth.currentUser) return;
+  if(cloudSyncStarted) return;
+  cloudSyncStarted=true;
 
-  usersLoadPromise = new Promise(resolve => {
-    window.onSnapshotRef(window.colRef(window.dbCloud, "users"), snapshot => {
-      cachedUsers = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
-      usersLoaded = true;
-      resolve(cachedUsers);
-      refreshAll();
-    }, error => {
-      console.error("Users sync failed:", error);
-      usersLoaded = false;
-      resolve([]);
-    });
+  const role=String(currentUser?.role||"").toLowerCase();
+  const staff=isStaff(role);
+  const listen=(ref,callback,error)=>{
+    try{
+      const unsub=window.onSnapshotRef(ref,callback,error);
+      if(typeof unsub==="function") cloudUnsubscribers.push(unsub);
+    }catch(e){console.error("Firebase listener setup failed:",e);}
+  };
+
+  // Staff may read the users collection. Students may read only their own profile.
+  usersLoadPromise=new Promise(resolve=>{
+    const handle=snapshot=>{
+      if(snapshot.docs) cachedUsers=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id}));
+      else if(snapshot.exists) cachedUsers=[{...snapshot.data(),firebaseId:snapshot.id}];
+      else cachedUsers=[];
+      usersLoaded=true; resolve(cachedUsers); refreshAll();
+    };
+    const fail=error=>{console.error("Users sync failed:",error);usersLoaded=false;resolve([]);};
+    if(staff) listen(window.colRef(window.dbCloud,"users"),handle,fail);
+    else listen(window.docRef(window.dbCloud,"users",window.firebaseAuth.currentUser.uid),handle,fail);
   });
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "pendingStudents"), snapshot => {
-    cachedPendingStudents = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }))
-      .filter(x => String(x.status||"pending")==="pending");
-    renderPendingStudents();
-    renderRequirements();
-    refreshAll();
-  });
+  // Registration requests and attempt logs are staff-only.
+  if(staff){
+    listen(window.colRef(window.dbCloud,"pendingStudents"),snapshot=>{
+      cachedPendingStudents=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id})).filter(x=>String(x.status||"pending")==="pending");
+      renderPendingStudents(); renderRequirements(); refreshAll();
+    },error=>console.error("Pending students sync failed:",error));
+  }else cachedPendingStudents=[];
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "departments"), snapshot => {
-    cachedDepartments = snapshot.docs.map(doc => ({...doc.data(), firebaseId:doc.id}));
-    loadDropdowns();
-    loadRegistrationDropdowns();
-    if(typeof renderAcademicDepartmentList === "function") renderAcademicDepartmentList();
-  }, error => console.error("Department Firebase sync error:", error));
+  listen(window.colRef(window.dbCloud,"departments"),snapshot=>{
+    cachedDepartments=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id}));
+    loadDropdowns(); loadRegistrationDropdowns();
+    if(typeof renderAcademicDepartmentList==="function") renderAcademicDepartmentList();
+  },error=>console.error("Department Firebase sync error:",error));
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "attendance"), snapshot => {
-    cachedAttendance = snapshot.docs.map(doc => ({...doc.data(), firebaseId:doc.id}));
-    refreshAll();
-  });
+  // Staff read all attendance; students read only records carrying their Auth UID.
+  if(staff){
+    listen(window.colRef(window.dbCloud,"attendance"),snapshot=>{
+      cachedAttendance=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id})); refreshAll();
+    },error=>console.error("Attendance Firebase sync error:",error));
+  }else{
+    listen(window.colRef(window.dbCloud,"attendance").where("studentAuthUid","==",window.firebaseAuth.currentUser.uid),snapshot=>{
+      cachedAttendance=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id})); refreshAll();
+    },error=>console.error("Student attendance sync failed:",error));
+  }
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "activeSessions"), snapshot => {
-    activeSessions = snapshot.docs.map(doc => ({...doc.data(),firebaseId:doc.id}))
-      .filter(x => x.active).sort((a,b)=>(a.startTime||0)-(b.startTime||0));
-    activeSession = activeSessions[0] || null;
-    if(currentUser?.role==="student"){studentLiveLocationKey="";studentLiveLocationAllowed=false;}
-    handleSessionAlertTrigger();
-    refreshAll();
-  });
+  listen(window.colRef(window.dbCloud,"activeSessions"),snapshot=>{
+    activeSessions=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id})).filter(x=>x.active).sort((a,b)=>(a.startTime||0)-(b.startTime||0));
+    activeSession=activeSessions[0]||null;
+    if(role==="student"){studentLiveLocationKey="";studentLiveLocationAllowed=false;}
+    handleSessionAlertTrigger(); refreshAll();
+  },error=>console.error("Active sessions sync failed:",error));
 
-  window.onSnapshotRef(window.docRef(window.dbCloud, "system", "activeSession"), docSnap => {
-    if(docSnap.exists() && docSnap.data().active){
-      const legacy={...docSnap.data(),firebaseId:"legacy-activeSession",legacy:true};
-      if(!activeSessions.some(x=>x.firebaseId===legacy.firebaseId)) activeSessions=[legacy,...activeSessions];
-      activeSession=activeSessions[0]||legacy;
-      handleSessionAlertTrigger();
-      refreshAll();
+  // Legacy single-session document is readable by every signed-in user.
+  listen(window.docRef(window.dbCloud,"system","activeSession"),docSnap=>{
+    activeSessions=activeSessions.filter(x=>!x.legacy);
+    if(docSnap.exists()&&docSnap.data().active){
+      activeSessions=[{...docSnap.data(),firebaseId:"legacy-activeSession",legacy:true},...activeSessions];
     }
-  });
+    activeSession=activeSessions[0]||null; handleSessionAlertTrigger(); refreshAll();
+  },error=>console.error("Legacy session sync failed:",error));
 
-  window.onSnapshotRef(window.docRef(window.dbCloud, "system", "timetableConfig"), docSnap => {
-    if(docSnap.exists()) {
-      window.savedTimetableConfig=docSnap.data();
-      applyTimetableConfig(window.savedTimetableConfig);
-    } else {
-      window.savedTimetableConfig=null;
-      applyTimetableConfig({autoMode:"on",departmentName:"Information Technology",semester:"3",slots:DEFAULT_TIMETABLE});
-    }
-    renderTimetableEditor();
-    refreshAll();
-  });
+  // Timetable config is readable by all signed-in users.
+  listen(window.docRef(window.dbCloud,"system","timetableConfig"),docSnap=>{
+    if(docSnap.exists()){window.savedTimetableConfig=docSnap.data();applyTimetableConfig(window.savedTimetableConfig);}
+    else{window.savedTimetableConfig=null;applyTimetableConfig({autoMode:"on",departmentName:"Information Technology",semester:"3",slots:DEFAULT_TIMETABLE});}
+    renderTimetableEditor(); refreshAll();
+  },error=>console.error("Timetable sync failed:",error));
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "attendanceAttempts"), snapshot => {
-    cachedAttendanceAttempts=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id}))
-      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-    renderLocationAlerts();
-  });
+  if(staff){
+    listen(window.colRef(window.dbCloud,"attendanceAttempts"),snapshot=>{
+      cachedAttendanceAttempts=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+      renderLocationAlerts();
+    },error=>console.error("Attendance attempts sync failed:",error));
+  }else cachedAttendanceAttempts=[];
 
-  window.onSnapshotRef(window.colRef(window.dbCloud, "notes"), snapshot => {
+  listen(window.colRef(window.dbCloud,"notes"),snapshot=>{
     const next=snapshot.docs.map(doc=>({...doc.data(),firebaseId:doc.id}));
-    const previousIds=knownNoteIds;
-    cachedNotes=next;
-    knownNoteIds=new Set(next.map(n=>n.firebaseId));
-    renderNotes();
-    updateNotificationCount();
-    if(!notesInitialLoad && currentUser){
-      next.filter(n=>!previousIds.has(n.firebaseId)&&noteVisibleToUser(n)).forEach(showNoteNotification);
-    }
+    const previousIds=knownNoteIds; cachedNotes=next; knownNoteIds=new Set(next.map(n=>n.firebaseId));
+    renderNotes(); updateNotificationCount();
+    if(!notesInitialLoad&&currentUser) next.filter(n=>!previousIds.has(n.firebaseId)&&noteVisibleToUser(n)).forEach(showNoteNotification);
     notesInitialLoad=false;
-  });
+  },error=>console.error("Notes sync failed:",error));
 }
 
 /* =========================
@@ -897,6 +885,7 @@ async function login(){
     document.getElementById("headerUser").textContent=user.name+" ("+String(user.role||"").toUpperCase()+")";
     document.getElementById("dashboardWelcome").textContent="Welcome, "+user.name+". Your role is "+String(user.role||"").toUpperCase()+".";
     setupInterface();
+    initCloudSync();
     showPage("dashboard");
   }catch(e){
     console.error("Firebase Auth login failed:",e);
@@ -983,6 +972,7 @@ function showPage(id){
 
 async function logout(){
   try{if(window.firebaseAuth) await window.firebaseAuth.signOut();}catch(e){console.error(e);}
+  stopCloudSync();
   currentUser=null;
   stopScanner();
   document.getElementById("app").classList.add("hidden");
@@ -1352,6 +1342,7 @@ function markPresent(){
     const record = {
       id: Date.now(),
       studentId: currentUser.id,
+      studentAuthUid: window.firebaseAuth.currentUser?.uid || currentUser.authUid || "",
       studentName: currentUser.name,
       enroll: currentUser.enroll,
       department: currentUser.department,
@@ -1938,9 +1929,46 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
     window.updateDocRef=(docRef,data)=>docRef.update(data);
     window.writeBatchRef=(db)=>db.batch();
     window.firebaseReady=true; window.firebaseInitError=null;
-    if(typeof initCloudSync==="function")initCloudSync();
+
     firebaseAuth.onAuthStateChanged(async authUser=>{
-      if(!authUser && currentUser){currentUser=null;}
+      if(authUser){
+        try{
+          await waitForFirebase();
+          const profileSnap=await window.getDocRef(window.docRef(window.dbCloud,"users",authUser.uid));
+          if(!profileSnap.exists()){
+            currentUser=null;
+            stopCloudSync();
+            document.getElementById("app")?.classList.add("hidden");
+            document.getElementById("loginPage")?.classList.remove("hidden");
+            return;
+          }
+          const profile={...profileSnap.data(),firebaseId:profileSnap.id,authUid:authUser.uid,email:authUser.email||profileSnap.data().email};
+          if(String(profile.status||"approved")!=="approved"){
+            await firebaseAuth.signOut();
+            return;
+          }
+          currentUser=profile;
+          document.getElementById("loginPage")?.classList.add("hidden");
+          document.getElementById("app")?.classList.remove("hidden");
+          const header=document.getElementById("headerUser");
+          if(header) header.textContent=profile.name+" ("+String(profile.role||"").toUpperCase()+")";
+          const welcome=document.getElementById("dashboardWelcome");
+          if(welcome) welcome.textContent="Welcome, "+profile.name+". Your role is "+String(profile.role||"").toUpperCase()+".";
+          setupInterface();
+          initCloudSync();
+        }catch(e){
+          console.error("Auth session restore failed:",e);
+          currentUser=null;
+          stopCloudSync();
+          document.getElementById("app")?.classList.add("hidden");
+          document.getElementById("loginPage")?.classList.remove("hidden");
+        }
+      }else{
+        currentUser=null;
+        stopCloudSync();
+        document.getElementById("app")?.classList.add("hidden");
+        document.getElementById("loginPage")?.classList.remove("hidden");
+      }
     });
   }catch(error){
     console.error("Firebase initialization failed:",error);
@@ -1950,9 +1978,7 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
 })();
 </script>
 <script>
-// Surface module/Firebase errors instead of silently leaving the login screen stuck.
-window.firebaseReady = false;
-window.firebaseInitError = null;
+// Surface Firebase errors without overwriting the successful initialization state.
 window.addEventListener("error", function(e){
   const msg=String(e?.error?.message || e?.message || "Unknown JavaScript error");
   if(msg && /firebase|firestore|storage|module/i.test(msg)) window.firebaseInitError=msg;
@@ -1965,6 +1991,3 @@ window.addEventListener("unhandledrejection", function(e){
 
 </body>
 </html>
-
-
-
