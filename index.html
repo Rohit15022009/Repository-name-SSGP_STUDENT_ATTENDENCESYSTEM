@@ -492,15 +492,15 @@ Authorized admin or faculty staff can securely reset or clear cloud storage data
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-storage-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-auth-compat.js"></script>
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyA6v1VyvY-FPEW50gfRWY6VA5RIDKqqvuM",
-    authDomain: "smart-attendance-system1-58089.firebaseapp.com",
-    projectId: "smart-attendance-system1-58089",
-    storageBucket: "smart-attendance-system1-58089.firebasestorage.app",
-    messagingSenderId: "611391422838",
-    appId: "1:611391422838:web:8d9f67ad0179cc037fba57",
-    measurementId: "G-8CGMXNK0P8"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyA6v1VyvY-FPEW50gfRWY6VA5RIDKqqvuM",
+  authDomain: "smart-attendance-system1-58089.firebaseapp.com",
+  projectId: "smart-attendance-system1-58089",
+  storageBucket: "smart-attendance-system1-58089.firebasestorage.app",
+  messagingSenderId: "611391422838",
+  appId: "1:611391422838:web:8d9f67ad0179cc037fba57",
+  measurementId: "G-8CGMXNK0P8"
+};
 
   try {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -772,11 +772,34 @@ function initCloudSync() {
     renderPendingStudents();
   });
 
-  // Sync Departments
-  window.onSnapshotRef(window.colRef(window.dbCloud, "departments"), snapshot => {
-    cachedDepartments = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }));
+// Sync Departments
+window.onSnapshotRef(
+  window.colRef(window.dbCloud, "departments"),
+  snapshot => {
+
+    cachedDepartments = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      firebaseId: doc.id
+    }));
+
+    console.log(
+      "🔥 Firestore departments:",
+      cachedDepartments
+    );
+
     loadDropdowns();
-  });
+
+  },
+  error => {
+    console.error(
+      "❌ Departments Firestore sync failed:",
+      error
+    );
+
+    cachedDepartments = [];
+    loadDropdowns();
+  }
+);
 
   // Sync Attendance
   window.onSnapshotRef(window.colRef(window.dbCloud, "attendance"), snapshot => {
@@ -1411,29 +1434,125 @@ function closeTrackerModal() { document.getElementById("trackerModal").classList
 /* =========================
 UI HELPERS & MANAGEMENT TABS
 ========================= */
-function loadDropdowns(){
-  const departments=cachedDepartments||[];
-  ["sessionDepartment","newStudentDept","regDept","subjectDepartment","facultyDepartment"].forEach(id=>{
-    const el=document.getElementById(id); if(!el)return;
-    el.innerHTML='<option value="">Select Department</option>'+departments.map(d=>`<option value="${d.firebaseId}">${d.name}</option>`).join("");
-  });
-  const sems=["1","2","3","4","5","6","7","8"];
-  ["sessionSemester","newStudentSem","regSem","academicSemester","facultySemester"].forEach(id=>{
-    const el=document.getElementById(id); if(!el)return;
-    el.innerHTML='<option value="">Select Semester</option>'+sems.map(x=>`<option value="${x}">Semester ${x}</option>`).join("");
-  });
-  const td=document.getElementById("timetableDepartment");
-  if(td){
-    td.innerHTML='<option value="">Select Department</option>'+departments.map(d=>`<option value="${d.firebaseId}">${d.name}</option>`).join("");
-    const cfg=getTimetableConfig();
-    const match=departments.find(d=>d.firebaseId===cfg.departmentId || d.name===cfg.departmentName || /information technology|\bit\b/i.test(d.name||""));
-    if(match) td.value=match.firebaseId;
-  }
-  updateDependentSubjects();
-  if(currentUser?.role==="student") {
-    const d=getDepartmentObj(currentUser.department);
-    loadSubjects("studentSubject",d,currentUser.semester);
-    document.getElementById("studentAttendanceContext").textContent="Department: "+getDepartment(currentUser.department)+" • Semester: "+currentUser.semester;
+function loadDropdowns() {
+  try {
+    const departments = Array.isArray(cachedDepartments)
+      ? cachedDepartments
+      : [];
+
+    console.log("📚 Departments loaded:", departments);
+
+    // Department dropdowns
+    const departmentDropdowns = [
+      "sessionDepartment",
+      "newStudentDept",
+      "regDept",
+      "subjectDepartment",
+      "facultyDepartment"
+    ];
+
+    departmentDropdowns.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const options = departments
+        .filter(d => d && d.name)
+        .map(d => {
+          const value = d.firebaseId || d.id || "";
+          const name = String(d.name).trim();
+
+          return `<option value="${value}">${name}</option>`;
+        })
+        .join("");
+
+      el.innerHTML =
+        '<option value="">Select Department</option>' + options;
+    });
+
+    // Semester dropdowns
+    const sems = ["1", "2", "3", "4", "5", "6", "7", "8"];
+
+    [
+      "sessionSemester",
+      "newStudentSem",
+      "regSem",
+      "academicSemester",
+      "facultySemester"
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      el.innerHTML =
+        '<option value="">Select Semester</option>' +
+        sems
+          .map(x => `<option value="${x}">Semester ${x}</option>`)
+          .join("");
+    });
+
+    // Timetable department
+    const td = document.getElementById("timetableDepartment");
+
+    if (td) {
+      const options = departments
+        .filter(d => d && d.name)
+        .map(d => {
+          const value = d.firebaseId || d.id || "";
+          const name = String(d.name).trim();
+
+          return `<option value="${value}">${name}</option>`;
+        })
+        .join("");
+
+      td.innerHTML =
+        '<option value="">Select Department</option>' + options;
+
+      const cfg = getTimetableConfig();
+
+      const match = departments.find(d =>
+        (d.firebaseId && d.firebaseId === cfg.departmentId) ||
+        (d.id && String(d.id) === String(cfg.departmentId)) ||
+        (d.name && d.name === cfg.departmentName) ||
+        (d.name &&
+          /information technology|\bit\b/i.test(String(d.name)))
+      );
+
+      if (match) {
+        td.value = match.firebaseId || match.id || "";
+      }
+    }
+
+    // Update subjects depending on department/semester
+    if (typeof updateDependentSubjects === "function") {
+      updateDependentSubjects();
+    }
+
+    // Student context
+    if (currentUser?.role === "student") {
+      const d = getDepartmentObj(currentUser.department);
+
+      if (typeof loadSubjects === "function") {
+        loadSubjects(
+          "studentSubject",
+          d,
+          currentUser.semester
+        );
+      }
+
+      const context = document.getElementById(
+        "studentAttendanceContext"
+      );
+
+      if (context) {
+        context.textContent =
+          "Department: " +
+          getDepartment(currentUser.department) +
+          " • Semester: " +
+          currentUser.semester;
+      }
+    }
+
+  } catch (error) {
+    console.error("❌ Department dropdown loading failed:", error);
   }
 }
 
@@ -1640,13 +1759,61 @@ function deleteUser(firebaseId){
   }
 }
 
-function addDepartment(){
-  let name=document.getElementById("departmentName").value.trim();
-  if(!name){ alert("Enter department name."); return; }
-  window.addDocRef(window.colRef(window.dbCloud, "departments"), {id:Date.now(), name, semesters:{}}).then(()=>{
-    alert("Department added!");
-    document.getElementById("departmentName").value="";
-  });
+async function addDepartment() {
+  try {
+    // Make sure Firebase is ready
+    if (!window.dbCloud) {
+      alert("❌ Firebase is not connected. Please refresh the page and try again.");
+      return;
+    }
+
+    const input = document.getElementById("departmentName");
+    const name = input ? input.value.trim() : "";
+
+    if (!name) {
+      alert("Please enter a department name.");
+      return;
+    }
+
+    // Prevent duplicate department names
+    const existing = (cachedDepartments || []).some(
+      d => String(d.name || "").trim().toLowerCase() === name.toLowerCase()
+    );
+
+    if (existing) {
+      alert("⚠️ This department already exists.");
+      return;
+    }
+
+    // Save permanently to Firestore
+    const docRef = await window.addDocRef(
+      window.colRef(window.dbCloud, "departments"),
+      {
+        name: name,
+        semesters: {},
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }
+    );
+
+    console.log("✅ Department saved to Firestore:", docRef.id);
+
+    input.value = "";
+
+    alert("✅ Department added successfully!");
+
+    // The onSnapshot listener in initCloudSync()
+    // will update cachedDepartments and refresh the dropdowns.
+    loadDropdowns();
+
+  } catch (error) {
+    console.error("❌ Department save failed:", error);
+
+    alert(
+      "❌ Department could not be saved.\n\n" +
+      "Firebase error: " +
+      (error.message || error)
+    );
+  }
 }
 
 function addAcademic(){
@@ -1940,4 +2107,13 @@ document.addEventListener("DOMContentLoaded",async()=>{
 </div>
 <style>@media(max-width:700px){#mobileBottomNav{display:grid;} body{padding-bottom:70px;} .container{padding:12px;} .logo{font-size:16px;} .user-info{font-size:12px;}}</style>
 </body>
+<script>
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js")
+            .then(() => console.log("Service Worker registered"))
+            .catch(err => console.error("Service Worker error:", err));
+    });
+}
+</script>
 </html>
