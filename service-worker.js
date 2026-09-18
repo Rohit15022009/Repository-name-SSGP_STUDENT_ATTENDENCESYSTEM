@@ -1,4 +1,4 @@
-const CACHE = "smart-attendance-v1";
+const CACHE = "smart-attendance-v3";
 
 const APP_SHELL = [
   "./",
@@ -6,7 +6,6 @@ const APP_SHELL = [
   "./manifest.json"
 ];
 
-// Install
 self.addEventListener("install", event => {
   event.waitUntil(
     caches.open(CACHE)
@@ -15,7 +14,6 @@ self.addEventListener("install", event => {
   );
 });
 
-// Activate
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
@@ -30,7 +28,6 @@ self.addEventListener("activate", event => {
   );
 });
 
-// Fetch
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
 
