@@ -76,6 +76,31 @@ th{background:#f8fafc;}
 /* CODE */
 .attendance-code{text-align:center;font-size:42px;letter-spacing:8px;font-weight:bold;background:#eff6ff;color:#1d4ed8;padding:25px;border-radius:15px;margin:15px 0;}
 .hidden{display:none!important;}
+/* LOGIN PAGE FIX */
+#loginPage:not(.hidden){
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    min-height:100vh !important;
+    height:auto !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    position:relative !important;
+    box-sizing:border-box !important;
+}
+
+#loginPage:not(.hidden) .container{
+    width:100% !important;
+    min-height:100vh !important;
+    box-sizing:border-box !important;
+}
+
+#loginPage:not(.hidden) .login-box{
+    box-sizing:border-box !important;
+    width:min(92vw,460px) !important;
+    max-width:460px !important;
+    margin:40px auto !important;
+}
 .message{padding:10px;border-radius:8px;margin:10px 0;}
 
 /* REAL-TIME STUDENT SESSION ALERT POPUP */
