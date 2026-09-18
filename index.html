@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -855,44 +854,134 @@ function isStaff(role){return ["faculty","admin","developer"].includes(String(ro
 LOGIN SYSTEM
 ========================= */
 async function login(){
-  const email=document.getElementById("loginUsername").value.trim().toLowerCase();
+  const username=document.getElementById("loginUsername").value.trim().toLowerCase();
   const password=document.getElementById("loginPassword").value;
   const msgBox=document.getElementById("loginMessage");
   const showError=t=>{msgBox.textContent=t;msgBox.className="message danger";msgBox.classList.remove("hidden");};
 
-  if(!email||!password){showError("Enter your email address and password.");return;}
-  msgBox.textContent="Signing in securely with Firebase Authentication...";
+  if(!username||!password){showError("Enter your User ID and password.");return;}
+  msgBox.textContent="Signing in securely...";
   msgBox.className="message";msgBox.classList.remove("hidden");
 
   try{
     await waitForFirebase();
-    const cred=await window.firebaseAuth.signInWithEmailAndPassword(email,password);
-    const snap=await window.getDocRef(window.docRef(window.dbCloud,"users",cred.user.uid));
+
+    /*
+      Website login is User ID + Password.
+      Firebase Authentication still performs the real authentication.
+
+      Protected built-in accounts:
+        admin     / admin123
+        developer / developer123
+
+      Their Firebase Auth emails are internal technical identifiers.
+      Student/faculty User IDs are resolved through loginDirectory/{username}.
+    */
+    let authEmail="";
+
+    if(username==="admin"){
+      authEmail="admin@smartattendance.local";
+    }else if(username==="developer"){
+      authEmail="developer@smartattendance.local";
+    }else{
+      if(!window.dbCloud || !window.getDocRef || !window.docRef){
+        showError("Firebase database is not ready. Please refresh the page.");
+        return;
+      }
+
+      /* loginDirectory contains only the minimum mapping needed for login. */
+      const directorySnap=await window.getDocRef(
+        window.docRef(window.dbCloud,"loginDirectory",username)
+      );
+
+      if(!directorySnap.exists()){
+        showError("User ID not found.");
+        return;
+      }
+
+      const directory=directorySnap.data()||{};
+      authEmail=String(directory.authEmail||"").trim().toLowerCase();
+
+      if(!authEmail){
+        showError("This User ID is not configured correctly. Contact Admin/Developer.");
+        return;
+      }
+    }
+
+    msgBox.textContent="Checking password...";
+    const cred=await window.firebaseAuth.signInWithEmailAndPassword(authEmail,password);
+
+    const snap=await window.getDocRef(
+      window.docRef(window.dbCloud,"users",cred.user.uid)
+    );
+
     if(!snap.exists()){
       await window.firebaseAuth.signOut();
-      showError("Authentication succeeded, but your account profile is not registered in the system.");
+      showError("Authentication succeeded, but the account profile was not found.");
       return;
     }
-    const user={...snap.data(),firebaseId:snap.id,authUid:cred.user.uid,email:cred.user.email||snap.data().email};
+
+    const user={
+      ...snap.data(),
+      firebaseId:snap.id,
+      authUid:cred.user.uid,
+      email:cred.user.email||snap.data().email
+    };
+
+    const role=String(user.role||"").toLowerCase();
+    if(!["student","faculty","admin","developer"].includes(role)){
+      await window.firebaseAuth.signOut();
+      showError("This account has an invalid role.");
+      return;
+    }
+
     if(String(user.status||"approved")!=="approved"){
       await window.firebaseAuth.signOut();
       showError("This account is not approved.");
       return;
     }
+
+    /* Confirm the entered User ID matches the profile. */
+    const profileUserId=String(user.username||user.userId||user.enroll||"").trim().toLowerCase();
+    if(profileUserId && profileUserId!==username){
+      await window.firebaseAuth.signOut();
+      showError("This User ID does not match the account profile.");
+      return;
+    }
+
     currentUser=user;
+    cachedUsers=[...(cachedUsers||[]).filter(u=>u.firebaseId!==user.firebaseId),user];
+    usersLoaded=true;
+
     msgBox.classList.add("hidden");
-    document.getElementById("loginPage").classList.add("hidden");
-    document.getElementById("app").classList.remove("hidden");
-    document.getElementById("headerUser").textContent=user.name+" ("+String(user.role||"").toUpperCase()+")";
-    document.getElementById("dashboardWelcome").textContent="Welcome, "+user.name+". Your role is "+String(user.role||"").toUpperCase()+".";
+    document.getElementById("loginPage")?.classList.add("hidden");
+    document.getElementById("app")?.classList.remove("hidden");
+
+    const header=document.getElementById("headerUser");
+    if(header)header.textContent=(user.name||username)+" ("+role.toUpperCase()+")";
+
+    const welcome=document.getElementById("dashboardWelcome");
+    if(welcome)welcome.textContent="Welcome, "+(user.name||username)+". Your role is "+role.toUpperCase()+".";
+
     setupInterface();
     initCloudSync();
     showPage("dashboard");
+
   }catch(e){
     console.error("Firebase Auth login failed:",e);
-    showError(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found"
-      ?"Invalid email or password."
-      :"Login failed: "+(e.message||e));
+    let message="Login failed.";
+    if(e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found"){
+      message="Invalid User ID or password.";
+    }else if(e.code==="auth/too-many-requests"){
+      message="Too many login attempts. Please try again later.";
+    }else if(e.code==="auth/api-key-not-valid"){
+      message="Firebase API key is invalid. Check Firebase Project Settings.";
+    }else if(e.code==="permission-denied"){
+      message="Firebase permission denied. Check the Firestore Security Rules.";
+    }else{
+      message="Login failed: "+(e.message||e);
+    }
+    showError(message);
   }
 }
 
@@ -1054,6 +1143,7 @@ async function approveStudent(firebaseId){
     const uid=await createAuthAccountAndSendReset(p);
     const profile={id:Date.now(),authUid:uid,role:"student",name:p.name,username:p.username,email:p.email,phone:p.phone,enroll:p.enroll,department:p.department,semester:p.semester,batch:p.batch,status:"approved",approvedByUid:window.firebaseAuth.currentUser?.uid||"",approvedBy:currentUser.name,approvedByRole:currentUser.role,approvedAt:Date.now()};
     await window.setDocRef(window.docRef(window.dbCloud,"users",uid),profile,{merge:false});
+    await window.setDocRef(window.docRef(window.dbCloud,"loginDirectory",String(p.username).trim().toLowerCase()),{authEmail:p.email,role:"student",updatedAt:Date.now()},{merge:true});
     await window.deleteDocRef(window.docRef(window.dbCloud,"pendingStudents",firebaseId));
     alert("Student approved. Firebase sent a password-reset email to set the password.");
   }catch(e){console.error(e);alert("Approval failed: "+(e.message||e));}
@@ -1584,6 +1674,7 @@ async function addStudent(){
   try{
     const uid=await createAuthAccountAndSendReset({email});
     await window.setDocRef(window.docRef(window.dbCloud,"users",uid),{id:Date.now(),authUid:uid,role:"student",name,enroll,email,phone,department:dept,semester:sem,batch,username,status:"approved",createdByUid:window.firebaseAuth.currentUser.uid,createdBy:currentUser.name,createdAt:Date.now()});
+    await window.setDocRef(window.docRef(window.dbCloud,"loginDirectory",String(username).trim().toLowerCase()),{authEmail:email,role:"student",updatedAt:Date.now()},{merge:true});
     alert("Student account created. Firebase sent a password-reset email.");
     ["newStudentName","newStudentEnroll","newStudentEmail","newStudentPhone","newStudentUsername"].forEach(id=>document.getElementById(id).value="");
   }catch(e){console.error(e);alert("Unable to create student: "+(e.message||e));}
@@ -1603,6 +1694,7 @@ async function addFaculty(){
   try{
     const uid=await createAuthAccountAndSendReset({email});
     await window.setDocRef(window.docRef(window.dbCloud,"users",uid),{id:Date.now(),authUid:uid,role:"faculty",name,enroll:id,username,email,phone,department:dept,semester:sem,status:"approved",createdByUid:window.firebaseAuth.currentUser.uid,createdBy:currentUser.name,createdAt:Date.now()});
+    await window.setDocRef(window.docRef(window.dbCloud,"loginDirectory",String(username).trim().toLowerCase()),{authEmail:email,role:"faculty",updatedAt:Date.now()},{merge:true});
     alert("Faculty account created. Firebase sent a password-reset email.");
   }catch(e){console.error(e);alert("Unable to create faculty: "+(e.message||e));}
 }
@@ -1617,7 +1709,8 @@ async function addAdmin(){
   if(cachedUsers.some(u=>String(u.email||"").toLowerCase()===email||String(u.enroll||"").toLowerCase()===id.toLowerCase())){alert("Admin email or ID already exists.");return;}
   try{
     const uid=await createAuthAccountAndSendReset({email});
-    await window.setDocRef(window.docRef(window.dbCloud,"users",uid),{id:Date.now(),authUid:uid,role:"admin",name,enroll:id,email,phone,status:"approved",createdByUid:window.firebaseAuth.currentUser.uid,createdBy:currentUser.name,createdAt:Date.now()});
+    await window.setDocRef(window.docRef(window.dbCloud,"users",uid),{id:Date.now(),authUid:uid,role:"admin",name,enroll:id,username:id,email,phone,status:"approved",createdByUid:window.firebaseAuth.currentUser.uid,createdBy:currentUser.name,createdAt:Date.now()});
+    await window.setDocRef(window.docRef(window.dbCloud,"loginDirectory",String(id).trim().toLowerCase()),{authEmail:email,role:"admin",updatedAt:Date.now()},{merge:true});
     alert("Admin account created. Firebase sent a password-reset email.");
     renderAdminManagement();
   }catch(e){console.error(e);alert("Unable to create Admin: "+(e.message||e));}
